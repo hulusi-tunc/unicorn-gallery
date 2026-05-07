@@ -1,0 +1,158 @@
+import 'server-only';
+import { getSupabaseAdminClient } from './supabase/server';
+import type { ManifestSnapshot } from './db';
+
+const SCREENSHOTS_BUCKET = 'screenshots';
+
+export interface IntakeResult {
+  appId: string;
+  appSlug: string;
+  buildId: string;
+  buildSha: string;
+  framesCount: number;
+}
+
+export interface IntakeError {
+  status: number;
+  message: string;
+}
+
+/**
+ * Authenticate a project token and return the matching app, or an error.
+ * Uses service role (bypasses RLS) since the CLI is unauthenticated as a user.
+ */
+export async function findAppByToken(
+  token: string,
+): Promise<{ id: string; slug: string; platform: string } | IntakeError> {
+  if (!token || !token.trim()) {
+    return { status: 401, message: 'Missing project token.' };
+  }
+  const admin = getSupabaseAdminClient();
+  const { data, error } = await admin
+    .from('apps')
+    .select('id, slug, platform, project_token')
+    .eq('project_token', token.trim())
+    .maybeSingle();
+  if (error) return { status: 500, message: error.message };
+  if (!data) return { status: 403, message: 'Invalid project token.' };
+  return { id: data.id, slug: data.slug, platform: data.platform };
+}
+
+/**
+ * Persist an uploaded capture: storage upload, build insert, frame upsert,
+ * preview-image refresh.
+ */
+export async function ingestCapture({
+  appId,
+  appSlug,
+  manifest,
+  screenshots,
+}: {
+  appId: string;
+  appSlug: string;
+  manifest: ManifestSnapshot;
+  /** Map from manifest image path → PNG bytes */
+  screenshots: Map<string, ArrayBuffer>;
+}): Promise<IntakeResult | IntakeError> {
+  const admin = getSupabaseAdminClient();
+
+  // 1. Upload each screenshot to Storage and rewrite manifest URLs.
+  const newFlows: ManifestSnapshot['flows'] = [];
+  let uploaded = 0;
+  for (const flow of manifest.flows) {
+    const newFrames: typeof flow.frames = [];
+    for (const frame of flow.frames) {
+      const bytes = screenshots.get(frame.image);
+      if (!bytes) {
+        return {
+          status: 400,
+          message: `Manifest references "${frame.image}" but no screenshot for that path was uploaded.`,
+        };
+      }
+      const storagePath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}.png`;
+      const { error: upErr } = await admin.storage
+        .from(SCREENSHOTS_BUCKET)
+        .upload(storagePath, bytes, { contentType: 'image/png', upsert: true });
+      if (upErr) return { status: 500, message: `Storage upload failed: ${upErr.message}` };
+      const { data: pub } = admin.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(storagePath);
+      newFrames.push({ ...frame, image: pub.publicUrl });
+      uploaded++;
+    }
+    newFlows.push({ ...flow, frames: newFrames });
+  }
+
+  const rewritten: ManifestSnapshot = { ...manifest, flows: newFlows };
+
+  // 2. Upsert build by (app_id, sha).
+  const { data: existing } = await admin
+    .from('builds')
+    .select('id')
+    .eq('app_id', appId)
+    .eq('sha', manifest.buildSha)
+    .maybeSingle();
+
+  let buildId: string;
+  if (existing) {
+    const { error: updErr } = await admin
+      .from('builds')
+      .update({
+        manifest: rewritten,
+        captured_at: manifest.capturedAt,
+        platform: manifest.platform,
+      })
+      .eq('id', existing.id);
+    if (updErr) return { status: 500, message: `Build update failed: ${updErr.message}` };
+    buildId = existing.id;
+  } else {
+    const { data: build, error: insErr } = await admin
+      .from('builds')
+      .insert({
+        app_id: appId,
+        sha: manifest.buildSha,
+        captured_at: manifest.capturedAt,
+        platform: manifest.platform,
+        manifest: rewritten,
+        is_visible: true,
+      })
+      .select('id')
+      .single();
+    if (insErr) return { status: 500, message: `Build insert failed: ${insErr.message}` };
+    buildId = build.id;
+  }
+
+  // 3. Refresh app preview image (first flow's first frame).
+  const firstFrame = newFlows[0]?.frames[0];
+  if (firstFrame) {
+    await admin
+      .from('apps')
+      .update({ preview_image_url: firstFrame.image })
+      .eq('id', appId);
+  }
+
+  // 4. Upsert frame rows so comments persist across builds.
+  for (const flow of newFlows) {
+    for (const frame of flow.frames) {
+      const { error: frErr } = await admin.from('frames').upsert(
+        {
+          app_id: appId,
+          flow_id: flow.id,
+          frame_id: frame.id,
+          flow_name: flow.name,
+          frame_name: frame.name,
+          latest_image_url: frame.image,
+          latest_build_id: buildId,
+        },
+        { onConflict: 'app_id,flow_id,frame_id' },
+      );
+      if (frErr) return { status: 500, message: `Frame upsert failed: ${frErr.message}` };
+    }
+  }
+
+  return {
+    appId,
+    appSlug,
+    buildId,
+    buildSha: manifest.buildSha,
+    framesCount: uploaded,
+  };
+}

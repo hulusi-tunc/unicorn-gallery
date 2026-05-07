@@ -1,0 +1,86 @@
+{
+  "projectId": "folleli-mobile",
+  "buildSha": "demo123abc456",
+  "capturedAt": "2026-05-07T08:05:00.358Z",
+  "platform": "ios",
+  "flows": [
+    {
+      "id": "onboarding",
+      "name": "Onboarding",
+      "frames": [
+        {
+          "id": "01-welcome",
+          "name": "Welcome",
+          "image": "screenshots/onboarding/01-welcome.png"
+        },
+        {
+          "id": "02-signup",
+          "name": "Sign Up",
+          "image": "screenshots/onboarding/02-signup.png"
+        },
+        {
+          "id": "03-permissions",
+          "name": "Notifications",
+          "image": "screenshots/onboarding/03-permissions.png"
+        },
+        {
+          "id": "04-profile",
+          "name": "Profile Set Up",
+          "image": "screenshots/onboarding/04-profile.png"
+        }
+      ]
+    },
+    {
+      "id": "booking",
+      "name": "Padel Booking",
+      "frames": [
+        {
+          "id": "01-court-list",
+          "name": "Court List",
+          "image": "screenshots/booking/01-court-list.png"
+        },
+        {
+          "id": "02-court-detail",
+          "name": "Court Detail",
+          "image": "screenshots/booking/02-court-detail.png"
+        },
+        {
+          "id": "03-time",
+          "name": "Pick a Time",
+          "image": "screenshots/booking/03-time.png"
+        },
+        {
+          "id": "04-payment",
+          "name": "Payment",
+          "image": "screenshots/booking/04-payment.png"
+        },
+        {
+          "id": "05-confirmed",
+          "name": "Confirmed",
+          "image": "screenshots/booking/05-confirmed.png"
+        }
+      ]
+    },
+    {
+      "id": "my-bookings",
+      "name": "My Bookings",
+      "frames": [
+        {
+          "id": "01-empty",
+          "name": "Empty State",
+          "image": "screenshots/my-bookings/01-empty.png"
+        },
+        {
+          "id": "02-list",
+          "name": "Bookings List",
+          "image": "screenshots/my-bookings/02-list.png"
+        },
+        {
+          "id": "03-detail",
+          "name": "Booking Detail",
+          "image": "screenshots/my-bookings/03-detail.png"
+        }
+      ]
+    }
+  ]
+}

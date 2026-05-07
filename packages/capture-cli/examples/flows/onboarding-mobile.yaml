@@ -1,0 +1,12 @@
+# Example Maestro flow for an iOS or Android RN app.
+# Run with: pnpm exec gallery-capture --platform=ios
+# (Maestro itself drives the simulator; this file describes what to tap.)
+appId: com.unicornstudio.example
+---
+- launchApp
+- takeScreenshot: 01-welcome
+- tapOn: "Get Started"
+- takeScreenshot: 02-signup
+- inputText: "demo@example.test"
+- tapOn: "Continue"
+- takeScreenshot: 03-verify-email
