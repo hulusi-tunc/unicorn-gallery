@@ -94,17 +94,7 @@ export function AppCard({ app }: { app: AppRowWithStaff }): ReactNode {
       >
         {/* Left: title + tagline */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span
-              aria-hidden
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 999,
-                background: accent,
-                flexShrink: 0,
-              }}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
             <span
               style={{
                 fontFamily: editorialFonts.display,
