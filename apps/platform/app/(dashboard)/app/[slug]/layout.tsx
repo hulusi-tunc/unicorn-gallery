@@ -5,6 +5,7 @@ import { FlowSidebar } from '@/components/flow-sidebar';
 import {
   getAppBySlug,
   getCurrentProfile,
+  getLatestBuild,
   getManifestForApp,
   listAgencyProfiles,
 } from '@/lib/queries';
@@ -22,10 +23,11 @@ export default async function AppLayout({
   const app = await getAppBySlug(decodeURIComponent(slug));
   if (!app) notFound();
 
-  const [manifest, profile, agencyProfiles] = await Promise.all([
+  const [manifest, profile, agencyProfiles, latestBuild] = await Promise.all([
     getManifestForApp(app.id),
     getCurrentProfile(),
     listAgencyProfiles(),
+    getLatestBuild(app.id),
   ]);
   // Only admins can change Designer/PM. Other agency users see the chip but no dropdown.
   const canEdit = profile?.role === 'agency' && profile.is_admin === true;
@@ -37,6 +39,8 @@ export default async function AppLayout({
         manifest={manifest}
         agencyProfiles={agencyProfiles}
         canEdit={canEdit}
+        latestVersion={latestBuild?.version ?? null}
+        latestVersionAt={latestBuild?.created_at ?? null}
       />
       <div className="flex flex-1 overflow-hidden" style={{ minHeight: 'calc(100vh - 60px - 56px)' }}>
         {manifest ? <FlowSidebar manifest={manifest} appSlug={app.slug} /> : null}

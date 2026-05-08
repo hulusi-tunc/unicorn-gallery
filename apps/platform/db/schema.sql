@@ -149,6 +149,33 @@ create table if not exists public.builds (
 );
 create index if not exists builds_app_idx on public.builds(app_id, created_at desc);
 
+-- Per-app version number — stable, monotonic, human-friendly (v1, v2, ...).
+alter table public.builds add column if not exists version int;
+-- Optional human note shown in version history (e.g. "Added booking flow").
+alter table public.builds add column if not exists message text;
+create unique index if not exists builds_app_version_uq
+  on public.builds(app_id, version) where version is not null;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- frame_versions — per-build snapshot of every frame. Powers version history
+-- diff (added / updated / renamed / unchanged) without rereading manifests.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.frame_versions (
+  id uuid primary key default gen_random_uuid(),
+  build_id uuid not null references public.builds(id) on delete cascade,
+  app_id uuid not null references public.apps(id) on delete cascade,
+  flow_id text not null,
+  frame_id text not null,
+  flow_name text not null,
+  frame_name text not null,
+  image_url text not null,
+  change_kind text not null check (change_kind in ('added','updated','renamed','unchanged','removed')),
+  created_at timestamptz not null default now(),
+  unique (build_id, flow_id, frame_id)
+);
+create index if not exists frame_versions_build_idx on public.frame_versions(build_id);
+create index if not exists frame_versions_app_idx on public.frame_versions(app_id, created_at desc);
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- frames — derived from manifest, stable across builds.
 -- Comments live on frame.id, so they survive screenshot updates.
@@ -249,6 +276,7 @@ alter table public.app_customers enable row level security;
 alter table public.invites enable row level security;
 alter table public.builds enable row level security;
 alter table public.frames enable row level security;
+alter table public.frame_versions enable row level security;
 alter table public.comments enable row level security;
 
 -- profiles: read self or all-if-agency; update self only
@@ -302,6 +330,15 @@ create policy frames_select on public.frames for select
 
 drop policy if exists frames_agency_write on public.frames;
 create policy frames_agency_write on public.frames for all
+  using (public.is_agency()) with check (public.is_agency());
+
+-- frame_versions: same visibility as frames; only agency writes
+drop policy if exists frame_versions_select on public.frame_versions;
+create policy frame_versions_select on public.frame_versions for select
+  using (public.is_agency() or public.is_app_customer(app_id));
+
+drop policy if exists frame_versions_agency_write on public.frame_versions;
+create policy frame_versions_agency_write on public.frame_versions for all
   using (public.is_agency()) with check (public.is_agency());
 
 -- comments: anyone who can see the frame can read; anyone authenticated who can see the frame can write

@@ -73,6 +73,10 @@ export interface Build {
   manifest: ManifestSnapshot;
   is_visible: boolean;
   created_at: string;
+  /** Per-app monotonic version number (v1, v2, ...). Null on legacy rows. */
+  version: number | null;
+  /** Optional human note shown in version history. */
+  message: string | null;
 }
 
 export interface Frame {
@@ -111,6 +115,8 @@ export interface ManifestSnapshot {
   buildSha: string;
   capturedAt: string;
   platform: Platform;
+  /** Optional human note ("Added booking flow") shown on the version page. */
+  message?: string;
   flows: ManifestFlowSnapshot[];
 }
 

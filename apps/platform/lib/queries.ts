@@ -172,3 +172,77 @@ export async function getManifestForApp(
     })),
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Version history
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BuildSummary {
+  id: string;
+  version: number | null;
+  sha: string;
+  message: string | null;
+  capturedAt: string;
+  createdAt: string;
+  added: number;
+  updated: number;
+  renamed: number;
+  removed: number;
+  unchanged: number;
+}
+
+/**
+ * List all builds for an app (newest first) with per-build diff counts.
+ * Counts come from `frame_versions.change_kind` for each build, plus a
+ * computed `removed` count = frames in the previous build missing from this one.
+ */
+export async function listBuildsForApp(appId: string): Promise<BuildSummary[]> {
+  const supabase = await getSupabaseServerClient();
+  const { data: builds, error } = await supabase
+    .from('builds')
+    .select('id, version, sha, message, captured_at, created_at')
+    .eq('app_id', appId)
+    .order('created_at', { ascending: false });
+  if (error || !builds) return [];
+
+  // Pull all frame_versions for this app once and bucket by build_id.
+  const { data: rows } = await supabase
+    .from('frame_versions')
+    .select('build_id, flow_id, frame_id, change_kind')
+    .eq('app_id', appId);
+
+  const byBuild = new Map<string, { kinds: Record<string, number>; keys: Set<string> }>();
+  for (const r of rows ?? []) {
+    let entry = byBuild.get(r.build_id);
+    if (!entry) {
+      entry = { kinds: { added: 0, updated: 0, renamed: 0, unchanged: 0 }, keys: new Set() };
+      byBuild.set(r.build_id, entry);
+    }
+    entry.kinds[r.change_kind] = (entry.kinds[r.change_kind] ?? 0) + 1;
+    entry.keys.add(`${r.flow_id}::${r.frame_id}`);
+  }
+
+  // Builds are newest-first; previous build (for removed-detection) is the
+  // next entry in the array.
+  return builds.map((b, i) => {
+    const cur = byBuild.get(b.id);
+    const prev = i + 1 < builds.length ? byBuild.get(builds[i + 1]!.id) : undefined;
+    let removed = 0;
+    if (prev && cur) {
+      for (const key of prev.keys) if (!cur.keys.has(key)) removed++;
+    }
+    return {
+      id: b.id,
+      version: b.version,
+      sha: b.sha,
+      message: b.message,
+      capturedAt: b.captured_at,
+      createdAt: b.created_at,
+      added: cur?.kinds.added ?? 0,
+      updated: cur?.kinds.updated ?? 0,
+      renamed: cur?.kinds.renamed ?? 0,
+      unchanged: cur?.kinds.unchanged ?? 0,
+      removed,
+    };
+  });
+}

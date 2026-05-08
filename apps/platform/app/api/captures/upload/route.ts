@@ -121,11 +121,18 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
+  // ?replace=true wipes existing frames for this app before inserting,
+  // turning a push into a full state replace (atomic from the user's POV
+  // since chunked batches still come in as separate POSTs — only the FIRST
+  // batch should set replace=true; later batches just append).
+  const replace = request.nextUrl.searchParams.get('replace') === 'true';
+
   const result = await ingestCapture({
     appId: app.id,
     appSlug: app.slug,
     manifest,
     screenshots: parsed.screenshots,
+    replace,
   });
 
   if ('status' in result && 'message' in result) {

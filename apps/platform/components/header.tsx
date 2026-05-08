@@ -29,12 +29,16 @@ export function AppHeader({
   manifest: _manifest,
   agencyProfiles,
   canEdit,
+  latestVersion,
+  latestVersionAt,
 }: {
   app: AppRowWithStaff;
   // Manifest used to be displayed (build SHA + capture date) — no longer shown.
   manifest: Manifest | null;
   agencyProfiles: ProfileLite[];
   canEdit: boolean;
+  latestVersion: number | null;
+  latestVersionAt: string | null;
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
@@ -145,27 +149,81 @@ export function AppHeader({
         t={t}
       />
 
-      <span
+      <div
         style={{
           marginLeft: 'auto',
           display: 'inline-flex',
           alignItems: 'center',
-          height: 22,
-          padding: '0 10px',
-          borderRadius: 999,
-          border: `1px solid ${t.border}`,
-          background: t.surface,
-          fontFamily: editorialFonts.mono,
-          fontSize: 10,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          color: t.textSecondary,
+          gap: 8,
         }}
       >
-        {PLATFORM_LABEL[app.platform]}
-      </span>
+        {latestVersion != null ? (
+          <Link
+            href={`/app/${encodeURIComponent(app.slug)}/history`}
+            title={
+              latestVersionAt
+                ? `Latest push ${new Date(latestVersionAt).toLocaleString()}`
+                : 'Version history'
+            }
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              height: 22,
+              padding: '0 10px',
+              borderRadius: 999,
+              border: `1px solid ${t.border}`,
+              background: t.surface,
+              fontFamily: editorialFonts.mono,
+              fontSize: 10,
+              letterSpacing: '0.04em',
+              color: t.textPrimary,
+              textDecoration: 'none',
+              transition: 'background 200ms ease-out, color 200ms ease-out',
+            }}
+          >
+            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+              v{latestVersion}
+            </span>
+            {latestVersionAt ? (
+              <span style={{ color: t.textSecondary }}>· {formatRelative(latestVersionAt)}</span>
+            ) : null}
+          </Link>
+        ) : null}
+
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            height: 22,
+            padding: '0 10px',
+            borderRadius: 999,
+            border: `1px solid ${t.border}`,
+            background: t.surface,
+            fontFamily: editorialFonts.mono,
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: t.textSecondary,
+          }}
+        >
+          {PLATFORM_LABEL[app.platform]}
+        </span>
+      </div>
     </header>
   );
+}
+
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diff = Math.max(0, Date.now() - then);
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 function StaffChip({
