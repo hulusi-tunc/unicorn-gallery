@@ -48,7 +48,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const isPublic =
     PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + '/')) ||
     path.startsWith('/_next') ||
-    path.startsWith('/api/captures'); // intake API has its own auth
+    path.startsWith('/api/captures') || // intake API has its own bearer auth
+    path.startsWith('/api/projects'); // init CLI flow has its own bearer auth
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
