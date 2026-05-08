@@ -9,6 +9,9 @@ export interface Profile {
   email: string;
   name: string | null;
   role: Role;
+  flavor: string | null;
+  avatar_url: string | null;
+  is_admin: boolean;
   created_at: string;
 }
 
@@ -23,6 +26,24 @@ export interface AppRow {
   platform: Platform;
   created_by: string | null;
   created_at: string;
+  designer_id: string | null;
+  pm_id: string | null;
+}
+
+/** Lightweight profile used in lookups (avatar / chip rendering). */
+export interface ProfileLite {
+  id: string;
+  email: string;
+  name: string | null;
+  flavor: string | null;
+  avatar_url: string | null;
+  is_admin?: boolean;
+}
+
+/** AppRow with optional designer + PM profiles joined in. */
+export interface AppRowWithStaff extends AppRow {
+  designer: ProfileLite | null;
+  pm: ProfileLite | null;
 }
 
 export interface AppCustomer {
@@ -61,6 +82,12 @@ export interface Frame {
   frame_id: string;
   flow_name: string;
   frame_name: string;
+  /** Set for sub-flows; null/undefined for top-level flows. */
+  parent_flow_id: string | null;
+  /** Capture-assigned index of the flow among its siblings (smaller = earlier). */
+  flow_position: number | null;
+  /** Capture-assigned index of the frame within its flow. */
+  frame_position: number | null;
   latest_image_url: string | null;
   latest_build_id: string | null;
   created_at: string;
@@ -90,11 +117,19 @@ export interface ManifestSnapshot {
 export interface ManifestFlowSnapshot {
   id: string;
   name: string;
+  /** When set, this flow renders as a sub-flow of `parentFlowId`. */
+  parentFlowId?: string;
+  /** The route that auto-spawns into this flow (capture-side). */
+  autoRoute?: string;
+  /** Index among sibling flows (smaller = earlier). */
+  position?: number;
   frames: ManifestFrameSnapshot[];
 }
 
 export interface ManifestFrameSnapshot {
   id: string;
   name: string;
+  /** Index within the flow (smaller = earlier). */
+  position?: number;
   image: string;
 }

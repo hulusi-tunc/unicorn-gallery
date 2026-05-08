@@ -130,8 +130,17 @@ export async function ingestCapture({
   }
 
   // 4. Upsert frame rows so comments persist across builds.
-  for (const flow of newFlows) {
-    for (const frame of flow.frames) {
+  // The flow's index in `newFlows` is the display order; same for frames.
+  // If the manifest carries explicit positions we use those, otherwise we
+  // fall back to the array index so older clients still get sane ordering.
+  for (let fi = 0; fi < newFlows.length; fi++) {
+    const flow = newFlows[fi];
+    if (!flow) continue;
+    const flowPos = flow.position ?? fi;
+    for (let i = 0; i < flow.frames.length; i++) {
+      const frame = flow.frames[i];
+      if (!frame) continue;
+      const framePos = frame.position ?? i;
       const { error: frErr } = await admin.from('frames').upsert(
         {
           app_id: appId,
@@ -139,6 +148,9 @@ export async function ingestCapture({
           frame_id: frame.id,
           flow_name: flow.name,
           frame_name: frame.name,
+          parent_flow_id: flow.parentFlowId ?? null,
+          flow_position: flowPos,
+          frame_position: framePos,
           latest_image_url: frame.image,
           latest_build_id: buildId,
         },

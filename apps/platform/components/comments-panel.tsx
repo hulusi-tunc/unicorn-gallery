@@ -4,6 +4,7 @@ import { Loader2, MessageCircle, Send } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
+import { UserAvatar } from '@/components/user-avatar';
 import { editorialFonts, getNd } from '@/lib/tokens';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { CommentWithAuthor } from '@/lib/comments';
@@ -219,12 +220,6 @@ function CommentItem({
   comment: CommentWithAuthor;
   t: ReturnType<typeof getNd>;
 }): ReactNode {
-  const initials = (comment.author.name ?? comment.author.email)
-    .split(/\s+/)
-    .map((s) => s[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
   const date = new Date(comment.created_at);
   const dateLabel = isNaN(date.getTime())
     ? ''
@@ -232,23 +227,14 @@ function CommentItem({
 
   return (
     <div style={{ display: 'flex', gap: 12 }}>
-      <div
-        style={{
-          width: 28,
-          height: 28,
-          flexShrink: 0,
-          borderRadius: 999,
-          background: t.accentSubtle,
-          color: t.accent,
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 10,
-          fontWeight: 600,
-        }}
-      >
-        {initials || '··'}
-      </div>
+      <UserAvatar
+        name={comment.author.name}
+        email={comment.author.email}
+        avatarUrl={comment.author.avatar_url}
+        size={28}
+        background={t.accentSubtle}
+        color={t.accent}
+      />
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 500, color: t.textPrimary }}>

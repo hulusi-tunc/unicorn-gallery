@@ -64,8 +64,29 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  const projectToken = `pgt_${nanoid(32)}`;
   const admin = getSupabaseAdminClient();
+
+  // Idempotent: if slug already exists, return its existing token. Setup token
+  // is an agency-internal secret, so re-issuing the project token to a caller
+  // who already proved possession of the setup token is acceptable. Avoids
+  // designers getting stuck on a 409 when re-running the wizard.
+  const { data: existing } = await admin
+    .from('apps')
+    .select('id, slug, name, platform, project_token')
+    .eq('slug', slug)
+    .maybeSingle();
+  if (existing) {
+    return NextResponse.json({
+      id: existing.id,
+      slug: existing.slug,
+      name: existing.name,
+      platform: existing.platform,
+      projectToken: existing.project_token,
+      reused: true,
+    });
+  }
+
+  const projectToken = `pgt_${nanoid(32)}`;
   const { data, error } = await admin
     .from('apps')
     .insert({
@@ -78,12 +99,6 @@ export async function POST(request: NextRequest): Promise<Response> {
     .single();
 
   if (error) {
-    if (error.code === '23505') {
-      return NextResponse.json(
-        { error: `An app with slug "${slug}" already exists.` },
-        { status: 409 },
-      );
-    }
     return NextResponse.json(
       { error: `Insert failed: ${error.message}` },
       { status: 500 },

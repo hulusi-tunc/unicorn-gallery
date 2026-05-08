@@ -12,3 +12,4 @@ out/
 .turbo/
 coverage/
 .env*.local
+*.tsbuildinfo

@@ -24,6 +24,14 @@ create table if not exists public.profiles (
 );
 -- Display-only flavor label (designer | non-designer). No permission impact.
 alter table public.profiles add column if not exists flavor text;
+-- Avatar URL stored in Supabase Storage (avatars bucket). Public URL.
+alter table public.profiles add column if not exists avatar_url text;
+-- Admin tier: a subset of agency users who can manage staffing + invite/remove others.
+alter table public.profiles add column if not exists is_admin boolean not null default false;
+
+-- Always keep the founder admin so we never lock ourselves out.
+update public.profiles set role = 'agency', is_admin = true
+  where email = 'hulusitunc1@gmail.com';
 
 -- Pending role assignments — when an agency user signs up via /sign-up
 -- with a valid invite code, we record (email -> 'agency') here. The
@@ -94,6 +102,11 @@ create table if not exists public.apps (
 alter table public.apps add column if not exists project_token text unique;
 alter table public.apps add column if not exists preview_image_url text;
 alter table public.apps add column if not exists accent_color text;
+-- Project staffing — any agency user can change these via apps_agency_write RLS.
+alter table public.apps add column if not exists designer_id uuid references public.profiles(id) on delete set null;
+alter table public.apps add column if not exists pm_id uuid references public.profiles(id) on delete set null;
+create index if not exists apps_designer_idx on public.apps(designer_id);
+create index if not exists apps_pm_idx on public.apps(pm_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- app_customers — customers can only see apps they're added to
@@ -154,6 +167,20 @@ create table if not exists public.frames (
 );
 create index if not exists frames_app_flow_idx on public.frames(app_id, flow_id);
 
+-- Sub-flow nesting — `parent_flow_id` references another flow_id within
+-- the same app. Null = top-level flow. Capture's per-route auto-grouping
+-- detects parent paths (e.g. `/profile/profile-edit` nests under `/profile`).
+alter table public.frames add column if not exists parent_flow_id text;
+create index if not exists frames_app_parent_flow_idx
+  on public.frames(app_id, parent_flow_id);
+
+-- Display ordering — `flow_position` is the flow's index among siblings
+-- (small = earlier), `frame_position` is the frame's index inside its flow.
+-- Capture-side drag-and-drop assigns these so the web view matches the
+-- desktop view exactly.
+alter table public.frames add column if not exists flow_position int;
+alter table public.frames add column if not exists frame_position int;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- comments — threaded per frame
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -183,6 +210,19 @@ set search_path = public
 as $$
   select coalesce(
     (select role = 'agency' from public.profiles where id = auth.uid()),
+    false
+  );
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (select is_admin and role = 'agency' from public.profiles where id = auth.uid()),
     false
   );
 $$;

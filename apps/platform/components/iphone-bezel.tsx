@@ -1,11 +1,11 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 /**
- * iPhone 15 Pro bezel sandwich.
+ * iPhone 17 bezel sandwich.
  *
  * Composes a screenshot under a transparent-middle bezel PNG so the screenshot
- * shows up where the screen would be. Source bezel: 473×932 (RGBA).
- * Inner screen viewport: 393×852, inset 40px on every side.
+ * shows up where the screen would be. Source bezel: 450×920 (RGBA).
+ * Inner screen viewport: 402×874, inset 24/23 px from the bezel edge.
  *
  * Two sizing modes:
  *   1. Pass `width` or `height` (px) to size the bezel directly.
@@ -13,12 +13,14 @@ import type { CSSProperties, ReactNode } from 'react';
  *      should set the size via aspect-ratio (use IPHONE_BEZEL_ASPECT).
  */
 
-const BEZEL_W = 473;
-const BEZEL_H = 932;
-const FRAME_INSET_X_PCT = (40 / BEZEL_W) * 100; // 8.46%
-const FRAME_INSET_Y_PCT = (40 / BEZEL_H) * 100; // 4.29%
-const SCREEN_W_PCT = (393 / BEZEL_W) * 100;     // 83.09%
-const SCREEN_H_PCT = (852 / BEZEL_H) * 100;     // 91.42%
+const BEZEL_W = 450;
+const BEZEL_H = 920;
+const SCREEN_W = 402;
+const SCREEN_H = 874;
+const FRAME_INSET_X_PCT = ((BEZEL_W - SCREEN_W) / 2 / BEZEL_W) * 100; // 5.33%
+const FRAME_INSET_Y_PCT = ((BEZEL_H - SCREEN_H) / 2 / BEZEL_H) * 100; // 2.50%
+const SCREEN_W_PCT = (SCREEN_W / BEZEL_W) * 100;                     // 89.33%
+const SCREEN_H_PCT = (SCREEN_H / BEZEL_H) * 100;                     // 95.00%
 
 export const IPHONE_BEZEL_ASPECT = `${BEZEL_W} / ${BEZEL_H}`;
 export const IPHONE_BEZEL_RATIO = BEZEL_W / BEZEL_H;
@@ -68,18 +70,36 @@ export function IPhoneBezel({
           width: `${SCREEN_W_PCT}%`,
           height: `${SCREEN_H_PCT}%`,
           overflow: 'hidden',
-          // Proportional iPhone-15-Pro screen corner radius.
-          borderRadius: 'min(14% / 2, 56px)',
+          // Proportional iPhone 17 screen corner radius.
+          borderRadius: 'min(13% / 2, 60px)',
           background: '#000',
         }}
       >
         {children}
       </div>
+      {/* Light bezel — visible in light mode, hidden in dark. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/iphone-15-pro.png"
+        src="/iphone-17.png"
         alt=""
         aria-hidden
+        className="block dark:hidden"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          userSelect: 'none',
+        }}
+      />
+      {/* Dark bezel — hidden in light mode, visible in dark. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/iphone-17-dark.png"
+        alt=""
+        aria-hidden
+        className="hidden dark:block"
         style={{
           position: 'absolute',
           inset: 0,

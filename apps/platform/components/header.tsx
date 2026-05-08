@@ -1,39 +1,44 @@
 'use client';
 
-import { ChevronLeft, GitCommit } from 'lucide-react';
+import { ChevronDown, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import type { Manifest } from '@unicorn-studio/gallery-capture';
-import type { ReactNode } from 'react';
+import { useState, useTransition, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
-import type { AppRow } from '@/lib/db';
+import { UserAvatar } from '@/components/user-avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { assignStaff } from '@/lib/actions/assign-staff';
+import type { AppRowWithStaff, ProfileLite } from '@/lib/db';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
-const PLATFORM_LABEL: Record<AppRow['platform'], string> = {
+const PLATFORM_LABEL: Record<AppRowWithStaff['platform'], string> = {
   web: 'Web',
-  ios: 'iOS',
-  android: 'Android',
+  ios: 'Mobile',
+  android: 'Mobile',
 };
 
 export function AppHeader({
   app,
-  manifest,
+  manifest: _manifest,
+  agencyProfiles,
+  canEdit,
 }: {
-  app: AppRow;
+  app: AppRowWithStaff;
+  // Manifest used to be displayed (build SHA + capture date) — no longer shown.
   manifest: Manifest | null;
+  agencyProfiles: ProfileLite[];
+  canEdit: boolean;
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
   const accent = app.accent_color ?? t.accent;
-  const captured = manifest ? new Date(manifest.capturedAt) : null;
-  const dateLabel =
-    captured && !isNaN(captured.getTime())
-      ? captured.toLocaleString(undefined, {
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-        })
-      : null;
 
   return (
     <header
@@ -116,31 +121,29 @@ export function AppHeader({
         ) : null}
       </div>
 
-      {manifest ? (
-        <>
-          <div
-            style={{
-              marginLeft: 8,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '4px 10px',
-              borderRadius: 999,
-              border: `1px solid ${t.border}`,
-              background: t.surface,
-              fontFamily: editorialFonts.mono,
-              fontSize: 11,
-              color: t.textSecondary,
-            }}
-          >
-            <GitCommit size={11} />
-            <span>{manifest.buildSha.slice(0, 8)}</span>
-          </div>
-          {dateLabel ? (
-            <span style={{ fontSize: 12, color: t.textSecondary }}>{dateLabel}</span>
-          ) : null}
-        </>
-      ) : null}
+      <span style={{ width: 1, height: 16, background: t.border, marginLeft: 8 }} aria-hidden />
+
+      <StaffChip
+        appId={app.id}
+        appSlug={app.slug}
+        field="designer_id"
+        label="Designer"
+        person={app.designer}
+        agencyProfiles={agencyProfiles}
+        canEdit={canEdit}
+        t={t}
+      />
+
+      <StaffChip
+        appId={app.id}
+        appSlug={app.slug}
+        field="pm_id"
+        label="PM"
+        person={app.pm}
+        agencyProfiles={agencyProfiles}
+        canEdit={canEdit}
+        t={t}
+      />
 
       <span
         style={{
@@ -162,5 +165,124 @@ export function AppHeader({
         {PLATFORM_LABEL[app.platform]}
       </span>
     </header>
+  );
+}
+
+function StaffChip({
+  appId,
+  appSlug,
+  field,
+  label,
+  person,
+  agencyProfiles,
+  canEdit,
+  t,
+}: {
+  appId: string;
+  appSlug: string;
+  field: 'designer_id' | 'pm_id';
+  label: string;
+  person: ProfileLite | null;
+  agencyProfiles: ProfileLite[];
+  canEdit: boolean;
+  t: ReturnType<typeof getNd>;
+}): ReactNode {
+  const [pending, startTransition] = useTransition();
+  const display = person?.name?.trim() || person?.email?.split('@')[0] || 'Unassigned';
+
+  function onPick(profileId: string | null): void {
+    startTransition(async () => {
+      await assignStaff({ appId, appSlug, field, profileId });
+    });
+  }
+
+  const chipStyle: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '4px 10px 4px 4px',
+    borderRadius: 999,
+    border: `1px solid ${t.border}`,
+    background: t.surface,
+    color: person ? t.textDisplay : t.textSecondary,
+    fontFamily: editorialFonts.body,
+    fontSize: 12,
+    cursor: canEdit ? 'pointer' : 'default',
+    opacity: pending ? 0.6 : 1,
+    transition: 'opacity 200ms ease-out',
+  };
+
+  const inner = (
+    <>
+      <UserAvatar
+        name={person?.name ?? null}
+        email={person?.email ?? null}
+        avatarUrl={person?.avatar_url ?? null}
+        size={22}
+        background={person ? t.accentSubtle : t.surfaceInk}
+        color={person ? t.accent : t.textDisabled}
+      />
+      <span
+        style={{
+          fontFamily: editorialFonts.mono,
+          fontSize: 9,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: t.textDisabled,
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ color: person ? t.textDisplay : t.textSecondary }}>{display}</span>
+      {canEdit ? <ChevronDown size={11} style={{ color: t.textSecondary }} /> : null}
+    </>
+  );
+
+  if (!canEdit) {
+    return <span style={chipStyle}>{inner}</span>;
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" disabled={pending} style={{ ...chipStyle, border: `1px solid ${t.border}` }}>
+          {inner}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={6}>
+        <DropdownMenuLabel>{label}</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => onPick(null)}>
+          <span style={{ color: t.textSecondary, fontStyle: 'italic' }}>Unassigned</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {agencyProfiles.map((p) => (
+          <DropdownMenuItem key={p.id} onSelect={() => onPick(p.id)}>
+            <UserAvatar
+              name={p.name}
+              email={p.email}
+              avatarUrl={p.avatar_url}
+              size={20}
+              background={t.accentSubtle}
+              color={t.accent}
+            />
+            <span style={{ marginLeft: 6 }}>{p.name ?? p.email.split('@')[0]}</span>
+            {p.flavor ? (
+              <span
+                style={{
+                  marginLeft: 'auto',
+                  fontFamily: editorialFonts.mono,
+                  fontSize: 9,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: t.textDisabled,
+                }}
+              >
+                {p.flavor}
+              </span>
+            ) : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

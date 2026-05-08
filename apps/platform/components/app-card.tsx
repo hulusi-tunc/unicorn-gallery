@@ -4,16 +4,22 @@ import Link from 'next/link';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import { IPHONE_BEZEL_ASPECT, IPhoneBezel } from '@/components/iphone-bezel';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { UserAvatar } from '@/components/user-avatar';
 import { editorialFonts, getNd } from '@/lib/tokens';
-import type { AppRow } from '@/lib/db';
+import type { AppRow, AppRowWithStaff, ProfileLite } from '@/lib/db';
 
 const PLATFORM_LABEL: Record<AppRow['platform'], string> = {
   web: 'Web',
-  ios: 'iOS',
-  android: 'Android',
+  ios: 'Mobile',
+  android: 'Mobile',
 };
 
-export function AppCard({ app }: { app: AppRow }): ReactNode {
+export function AppCard({ app }: { app: AppRowWithStaff }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
   const [hover, setHover] = useState(false);
@@ -77,46 +83,127 @@ export function AppCard({ app }: { app: AppRow }): ReactNode {
         </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 4px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
-            aria-hidden
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: 999,
-              background: accent,
-              flexShrink: 0,
-            }}
-          />
-          <span
-            style={{
-              fontFamily: editorialFonts.display,
-              fontSize: 16,
-              fontWeight: 600,
-              letterSpacing: '-0.01em',
-              color: t.textDisplay,
-              transition: 'color 200ms cubic-bezier(0.165, 0.84, 0.44, 1)',
-            }}
-          >
-            {app.name}
-          </span>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '0 4px',
+        }}
+      >
+        {/* Left: title + tagline */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span
+              aria-hidden
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 999,
+                background: accent,
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                fontFamily: editorialFonts.display,
+                fontSize: 16,
+                fontWeight: 600,
+                letterSpacing: '-0.01em',
+                color: t.textDisplay,
+                transition: 'color 200ms cubic-bezier(0.165, 0.84, 0.44, 1)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {app.name}
+            </span>
+          </div>
+          {app.tagline ? (
+            <p
+              style={{
+                margin: 0,
+                fontFamily: editorialFonts.body,
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: t.textSecondary,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {app.tagline}
+            </p>
+          ) : null}
         </div>
-        {app.tagline ? (
-          <p
-            style={{
-              margin: 0,
-              fontFamily: editorialFonts.body,
-              fontSize: 13,
-              lineHeight: 1.5,
-              color: t.textSecondary,
-            }}
-          >
-            {app.tagline}
-          </p>
-        ) : null}
+
+        {/* Right: staff avatars */}
+        <StaffRow designer={app.designer} pm={app.pm} t={t} />
       </div>
     </Link>
+  );
+}
+
+function StaffRow({
+  designer,
+  pm,
+  t,
+}: {
+  designer: ProfileLite | null;
+  pm: ProfileLite | null;
+  t: ReturnType<typeof getNd>;
+}): ReactNode {
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: -8,
+        flexShrink: 0,
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Slight overlap so the two photos read as a pair, like a small AvatarGroup. */}
+      <span style={{ position: 'relative', zIndex: 2 }}>
+        <StaffAvatar role="Designer" person={designer} t={t} />
+      </span>
+      <span style={{ position: 'relative', zIndex: 1, marginLeft: -8 }}>
+        <StaffAvatar role="PM" person={pm} t={t} />
+      </span>
+    </div>
+  );
+}
+
+function StaffAvatar({
+  role,
+  person,
+  t,
+}: {
+  role: string;
+  person: ProfileLite | null;
+  t: ReturnType<typeof getNd>;
+}): ReactNode {
+  const display = person?.name ?? person?.email?.split('@')[0] ?? null;
+  const tooltip = `${role}: ${display ?? 'Unassigned'}`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span aria-label={tooltip} style={{ display: 'inline-flex' }}>
+          <UserAvatar
+            name={person?.name ?? null}
+            email={person?.email ?? null}
+            avatarUrl={person?.avatar_url ?? null}
+            size={36}
+            background={person ? t.accentSubtle : t.surface}
+            color={person ? t.accent : t.textDisabled}
+            border={`2px solid ${t.black}`}
+          />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -126,7 +213,7 @@ function PreviewArea({
   isMobile,
   theme,
 }: {
-  app: AppRow;
+  app: AppRowWithStaff;
   t: ReturnType<typeof getNd>;
   accent: string;
   isMobile: boolean;

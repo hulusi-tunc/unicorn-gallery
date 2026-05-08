@@ -1,11 +1,11 @@
 'use client';
 
-import { LayoutGrid, LogOut, Moon, Search, Settings, Sun } from 'lucide-react';
+import { Moon, Search, Sun } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import { UnicornLogo } from '@/components/brand/unicorn-logo';
+import { UserMenu } from '@/components/user-menu';
 import type { Profile } from '@/lib/db';
 import {
   editorialFonts,
@@ -19,21 +19,8 @@ export const TOPNAV_HEIGHT = 60;
 export function DashboardTopNav({ profile }: { profile: Profile }): ReactNode {
   const { theme, toggle } = useTheme();
   const t = getNd(theme);
-  const pathname = usePathname();
   const [searchFocused, setSearchFocused] = useState(false);
   const [logoHovered, setLogoHovered] = useState(false);
-
-  const isAgency = profile.role === 'agency';
-  const initials = (profile.name ?? profile.email)
-    .split(/\s+/)
-    .map((s) => s[0])
-    .filter(Boolean)
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
-  const isActive = (href: string): boolean =>
-    pathname === href || pathname.startsWith(href + '/');
 
   const navStyle: CSSProperties = {
     position: 'fixed',
@@ -66,7 +53,7 @@ export function DashboardTopNav({ profile }: { profile: Profile }): ReactNode {
 
   return (
     <nav style={navStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
         <Link
           href="/"
           aria-label="Unicorn Studio home"
@@ -94,17 +81,6 @@ export function DashboardTopNav({ profile }: { profile: Profile }): ReactNode {
             Unicorn Studio
           </span>
         </Link>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <NavLink href="/" active={pathname === '/'} t={t}>
-            Apps
-          </NavLink>
-          {isAgency ? (
-            <NavLink href="/admin" active={isActive('/admin')} t={t}>
-              Admin
-            </NavLink>
-          ) : null}
-        </div>
       </div>
 
       <div
@@ -159,52 +135,9 @@ export function DashboardTopNav({ profile }: { profile: Profile }): ReactNode {
         <IconButton onClick={toggle} aria-label="Toggle theme" t={t}>
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
         </IconButton>
-        {isAgency ? (
-          <Link href="/admin" aria-label="Admin">
-            <IconButton aria-label="Admin" t={t} as="span">
-              <Settings size={16} />
-            </IconButton>
-          </Link>
-        ) : null}
-        <Avatar initials={initials} t={t} />
-        <form action="/auth/sign-out" method="POST" style={{ display: 'inline' }}>
-          <IconButton type="submit" aria-label="Sign out" t={t}>
-            <LogOut size={15} />
-          </IconButton>
-        </form>
+        <UserMenu profile={profile} />
       </div>
     </nav>
-  );
-}
-
-function NavLink({
-  href,
-  active,
-  t,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  t: ReturnType<typeof getNd>;
-  children: ReactNode;
-}): ReactNode {
-  return (
-    <Link
-      href={href}
-      style={{
-        fontFamily: editorialFonts.body,
-        fontSize: 13,
-        fontWeight: 500,
-        color: active ? t.textDisplay : t.textSecondary,
-        background: active ? t.surface : 'transparent',
-        textDecoration: 'none',
-        padding: '6px 12px',
-        borderRadius: swatchRadii.md,
-        transition: 'background 120ms ease-out, color 120ms ease-out',
-      }}
-    >
-      {children}
-    </Link>
   );
 }
 
@@ -214,14 +147,12 @@ function IconButton({
   onClick,
   type = 'button',
   'aria-label': ariaLabel,
-  as = 'button',
 }: {
   children: ReactNode;
   t: ReturnType<typeof getNd>;
   onClick?: () => void;
   type?: 'button' | 'submit';
   'aria-label'?: string;
-  as?: 'button' | 'span';
 }): ReactNode {
   const style: CSSProperties = {
     width: 32,
@@ -236,47 +167,9 @@ function IconButton({
     cursor: 'pointer',
     transition: 'background 120ms ease-out, color 120ms ease-out',
   };
-  if (as === 'span') {
-    return (
-      <span style={style} aria-label={ariaLabel}>
-        {children}
-      </span>
-    );
-  }
   return (
     <button type={type} onClick={onClick} aria-label={ariaLabel} style={style}>
       {children}
     </button>
   );
 }
-
-function Avatar({
-  initials,
-  t,
-}: {
-  initials: string;
-  t: ReturnType<typeof getNd>;
-}): ReactNode {
-  return (
-    <span
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: swatchRadii.full,
-        background: t.accentSubtle,
-        color: t.accent,
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: editorialFonts.body,
-        fontSize: 11,
-        fontWeight: 600,
-        marginLeft: 4,
-      }}
-    >
-      {initials || '··'}
-    </span>
-  );
-}
-
-void LayoutGrid; // export reservation for future "switch view" affordance

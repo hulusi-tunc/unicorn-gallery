@@ -42,6 +42,10 @@ export interface Manifest {
 export interface ManifestFlow {
   id: string;
   name: string;
+  /** When set, this flow is rendered as a sub-flow nested under `parentFlowId`. */
+  parentFlowId?: string;
+  /** Capture's auto-route hint (the route that auto-creates this flow). Optional metadata. */
+  autoRoute?: string;
   frames: ManifestFrame[];
 }
 
