@@ -41,6 +41,8 @@ export function DeviceFrame({
   // Mobile — viewport-driven container so the bezel scales with screen height.
   // Sized off the inner viewport: chrome (top nav 60 + app header 56 + breadcrumb 49 +
   // kbd footer 41 + filmstrip 144) ≈ 350px, so bezel can take most of what's left.
+  // The bezel screen scrolls so full-page (taller-than-viewport) captures
+  // can be browsed inside the device frame, matching the running app.
   return (
     <div
       style={{
@@ -49,7 +51,7 @@ export function DeviceFrame({
         filter: 'drop-shadow(0 30px 50px rgba(0,0,0,0.45))',
       }}
     >
-      <IPhoneBezel>
+      <IPhoneBezel scrollable>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
@@ -57,9 +59,7 @@ export function DeviceFrame({
           style={{
             display: 'block',
             width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: 'top center',
+            height: 'auto',
           }}
           loading="eager"
         />

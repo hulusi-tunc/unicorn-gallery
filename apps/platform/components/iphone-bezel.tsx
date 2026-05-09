@@ -31,6 +31,7 @@ export function IPhoneBezel({
   children,
   className,
   style,
+  scrollable,
 }: {
   /** Optional fixed px width. */
   width?: number;
@@ -39,6 +40,13 @@ export function IPhoneBezel({
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  /**
+   * When true, the screen container scrolls vertically — used by the
+   * frame detail page so long full-page captures can be scrolled inside
+   * the bezel (just like in the actual app). Off by default to keep the
+   * journey-strip thumbnails clean.
+   */
+  scrollable?: boolean;
 }): ReactNode {
   const sized = width != null || height != null;
   const w = width ?? (height ? height * IPHONE_BEZEL_RATIO : undefined);
@@ -63,16 +71,20 @@ export function IPhoneBezel({
   return (
     <div className={className} style={containerStyle}>
       <div
+        className={scrollable ? 'iphone-bezel-screen-scroll' : undefined}
         style={{
           position: 'absolute',
           top: `${FRAME_INSET_Y_PCT}%`,
           left: `${FRAME_INSET_X_PCT}%`,
           width: `${SCREEN_W_PCT}%`,
           height: `${SCREEN_H_PCT}%`,
-          overflow: 'hidden',
+          overflowY: scrollable ? 'auto' : 'hidden',
+          overflowX: 'hidden',
           // Proportional iPhone 17 screen corner radius.
           borderRadius: 'min(13% / 2, 60px)',
           background: '#000',
+          // Smooth, momentum-y scroll inside the bezel.
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         {children}

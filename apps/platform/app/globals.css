@@ -85,3 +85,23 @@ code {
 .no-scrollbar {
   scrollbar-width: thin;
 }
+
+/* Bezel screen scrollbar — subtle so it doesn't clash with the device frame.
+   Used by the frame detail page's full-page captures. */
+.iphone-bezel-screen-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.iphone-bezel-screen-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.iphone-bezel-screen-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.iphone-bezel-screen-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+}
+.iphone-bezel-screen-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
