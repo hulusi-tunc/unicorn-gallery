@@ -72,6 +72,93 @@ export async function listArchivedApps(): Promise<AppRowWithStaff[]> {
 }
 
 /**
+ * Frames in this app whose latest push (frames.latest_build_id → builds
+ * .created_at) happened AFTER the user's last frame_reads.last_read_at.
+ * Frames the user has never opened also count — they're brand new for them.
+ *
+ * Used by the per-flow strip + filmstrip to drop a small "Updated" pill
+ * on cards that have been re-snapped since the user last visited, mirroring
+ * Capture's desktop "Updated" badge.
+ *
+ * Returns a Set of frame UUIDs (not the desktop `frame_id` strings) so the
+ * caller can match against frames.id when iterating manifest frames + their
+ * resolved DB rows. For now we just use the desktop frame_id since that's
+ * what JourneyStrip has on hand — see resolveByFrameKey below.
+ */
+export async function getFreshFrameKeys(
+  userId: string,
+  appId: string,
+): Promise<Set<string>> {
+  const supabase = await getSupabaseServerClient();
+  // Pull frames + their latest build's created_at + the user's read time.
+  const { data: frames, error: framesErr } = await supabase
+    .from('frames')
+    .select('id, frame_id, latest_build_id')
+    .eq('app_id', appId);
+  if (framesErr || !frames) return new Set();
+  const buildIds = Array.from(
+    new Set(
+      (frames as Array<{ latest_build_id: string | null }>)
+        .map((f) => f.latest_build_id)
+        .filter((b): b is string => Boolean(b)),
+    ),
+  );
+  if (buildIds.length === 0) return new Set();
+  const [{ data: builds }, { data: reads }] = await Promise.all([
+    supabase.from('builds').select('id, created_at').in('id', buildIds),
+    supabase
+      .from('frame_reads')
+      .select('frame_id, last_read_at')
+      .eq('user_id', userId)
+      .in(
+        'frame_id',
+        (frames as Array<{ id: string }>).map((f) => f.id),
+      ),
+  ]);
+  const buildAt = new Map<string, string>();
+  for (const b of (builds ?? []) as Array<{ id: string; created_at: string }>) {
+    buildAt.set(b.id, b.created_at);
+  }
+  const readAt = new Map<string, string>();
+  for (const r of (reads ?? []) as Array<{ frame_id: string; last_read_at: string }>) {
+    readAt.set(r.frame_id, r.last_read_at);
+  }
+  const fresh = new Set<string>();
+  for (const f of frames as Array<{
+    id: string;
+    frame_id: string;
+    latest_build_id: string | null;
+  }>) {
+    if (!f.latest_build_id) continue;
+    const updatedAt = buildAt.get(f.latest_build_id);
+    if (!updatedAt) continue;
+    const seenAt = readAt.get(f.id);
+    if (!seenAt || updatedAt > seenAt) {
+      fresh.add(f.frame_id);
+    }
+  }
+  return fresh;
+}
+
+/**
+ * Pull the per-frame capture history from frame_captures. Latest first
+ * (idx ASC: idx 0 = latest, 1+ = past versions newest-first like Capture
+ * orders snap.versions[]). Used by the frame view's version scrubber.
+ */
+export async function listFrameCaptures(
+  frameRowId: string,
+): Promise<Array<{ idx: number; image_url: string; captured_at: string }>> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('frame_captures')
+    .select('idx, image_url, captured_at')
+    .eq('frame_id', frameRowId)
+    .order('idx', { ascending: true });
+  if (error) return [];
+  return (data ?? []) as Array<{ idx: number; image_url: string; captured_at: string }>;
+}
+
+/**
  * Look up an app by slug. Returns archived rows too — viewing an archived
  * project's restore page or surfacing the "deleting in N days" banner needs
  * to find them. Filter at the call site if you need active-only.

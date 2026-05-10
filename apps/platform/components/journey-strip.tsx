@@ -17,10 +17,16 @@ export function JourneyStrip({
   flow,
   platform,
   appSlug,
+  freshFrameKeys,
 }: {
   flow: ManifestFlow;
   platform: Platform;
   appSlug: string;
+  /**
+   * Set of `frame_id` strings that were re-snapped since the current
+   * user last opened them. Cards in the set get an "Updated" pill.
+   */
+  freshFrameKeys?: Set<string>;
 }): ReactNode {
   return (
     <div className="no-scrollbar overflow-x-auto px-10 pb-10 pt-4">
@@ -32,6 +38,7 @@ export function JourneyStrip({
               step={i + 1}
               platform={platform}
               href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(frame.id)}`}
+              isFresh={freshFrameKeys?.has(frame.id) ?? false}
             />
             {i < flow.frames.length - 1 && (
               <ChevronRight
@@ -52,11 +59,13 @@ function JourneyCard({
   step,
   platform,
   href,
+  isFresh,
 }: {
   frame: ManifestFrame;
   step: number;
   platform: Platform;
   href: string;
+  isFresh: boolean;
 }): ReactNode {
   const isMobile = platform !== 'web';
 
@@ -69,6 +78,14 @@ function JourneyCard({
         <span className="absolute -top-2 -left-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white font-mono text-[10px] tabular-nums text-neutral-500 ring-1 ring-neutral-300 group-hover:ring-neutral-500 dark:bg-neutral-900 dark:text-neutral-400 dark:ring-neutral-700 dark:group-hover:ring-neutral-500">
           {String(step).padStart(2, '0')}
         </span>
+        {isFresh ? (
+          <span
+            className="absolute -top-2 right-1 z-10 inline-flex items-center rounded-full bg-[oklch(0.5_0.22_254)] px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-white shadow-md dark:bg-[oklch(0.6_0.21_254)]"
+            title="Updated since your last visit"
+          >
+            Updated
+          </span>
+        ) : null}
 
         {isMobile ? (
           <div

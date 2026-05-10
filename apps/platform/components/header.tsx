@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { assignStaff } from '@/lib/actions/assign-staff';
+import { ArchiveAppButton } from '@/components/archive-app-button';
 import { ShareButton } from '@/components/share-button';
 import type { AppRowWithStaff, ProfileLite } from '@/lib/db';
 import type { AppCustomerWithProfile } from '@/lib/queries';
@@ -162,13 +163,16 @@ export function AppHeader({
         }}
       >
         {canEdit ? (
-          <ShareButton
-            appId={app.id}
-            appSlug={app.slug}
-            appName={app.name}
-            publicShareToken={app.public_share_token}
-            customers={customers}
-          />
+          <>
+            <ShareButton
+              appId={app.id}
+              appSlug={app.slug}
+              appName={app.name}
+              publicShareToken={app.public_share_token}
+              customers={customers}
+            />
+            <ArchiveAppButton appSlug={app.slug} appName={app.name} />
+          </>
         ) : null}
 
         {latestVersion != null ? (

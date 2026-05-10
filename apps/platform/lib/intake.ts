@@ -90,6 +90,8 @@ export async function ingestCapture({
   }
 
   // 1. Upload each screenshot to Storage and rewrite manifest URLs.
+  // Past versions (frame.versions[]) ride alongside — each gets its own
+  // storage path so reviewers can scrub through capture history.
   const newFlows: ManifestSnapshot['flows'] = [];
   let uploaded = 0;
   for (const flow of manifest.flows) {
@@ -108,7 +110,34 @@ export async function ingestCapture({
         .upload(storagePath, bytes, { contentType: 'image/png', upsert: true });
       if (upErr) return { status: 500, message: `Storage upload failed: ${upErr.message}` };
       const { data: pub } = admin.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(storagePath);
-      newFrames.push({ ...frame, image: pub.publicUrl });
+      // Upload past versions (newest-first in the array; idx=1+ since
+      // idx=0 is the latest above). Missing PNGs in the multipart body
+      // are skipped silently — better to lose history than reject the
+      // whole push.
+      const newVersions: NonNullable<typeof frame.versions> = [];
+      const inputVersions = frame.versions ?? [];
+      for (let vi = 0; vi < inputVersions.length; vi++) {
+        const v = inputVersions[vi]!;
+        const vBytes = screenshots.get(v.image);
+        if (!vBytes) continue;
+        const vPath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}-v${vi + 1}.png`;
+        const { error: vErr } = await admin.storage
+          .from(SCREENSHOTS_BUCKET)
+          .upload(vPath, vBytes, { contentType: 'image/png', upsert: true });
+        if (vErr) {
+          // Don't fail the whole push for a version upload error — log it
+          // by skipping the entry. The latest image still made it.
+          continue;
+        }
+        const { data: vPub } = admin.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(vPath);
+        newVersions.push({ image: vPub.publicUrl, capturedAt: v.capturedAt });
+        uploaded++;
+      }
+      newFrames.push({
+        ...frame,
+        image: pub.publicUrl,
+        versions: newVersions.length > 0 ? newVersions : undefined,
+      });
       uploaded++;
     }
     newFlows.push({ ...flow, frames: newFrames });
@@ -227,7 +256,13 @@ export async function ingestCapture({
       .eq('id', appId);
   }
 
-  // 4. Upsert frame rows so comments persist across builds.
+  // 4. Upsert frame rows so comments persist across builds. After upsert
+  // we also rebuild the per-frame capture history (frame_captures): wipe
+  // prior rows for this frame, then insert latest (idx=0) + any version
+  // entries (idx 1+). Reviewers on the web side use these for the
+  // version scrubber; replacing rather than appending keeps the table
+  // in sync with whatever Capture last pushed.
+  //
   // The flow's index in `newFlows` is the display order; same for frames.
   // If the manifest carries explicit positions we use those, otherwise we
   // fall back to the array index so older clients still get sane ordering.
@@ -239,22 +274,80 @@ export async function ingestCapture({
       const frame = flow.frames[i];
       if (!frame) continue;
       const framePos = frame.position ?? i;
-      const { error: frErr } = await admin.from('frames').upsert(
+      const { data: frRow, error: frErr } = await admin
+        .from('frames')
+        .upsert(
+          {
+            app_id: appId,
+            flow_id: flow.id,
+            frame_id: frame.id,
+            flow_name: flow.name,
+            frame_name: frame.name,
+            parent_flow_id: flow.parentFlowId ?? null,
+            flow_position: flowPos,
+            frame_position: framePos,
+            latest_image_url: frame.image,
+            latest_build_id: buildId,
+          },
+          { onConflict: 'app_id,flow_id,frame_id' },
+        )
+        .select('id')
+        .single();
+      if (frErr || !frRow)
+        return {
+          status: 500,
+          message: `Frame upsert failed: ${frErr?.message ?? 'no row returned'}`,
+        };
+
+      // Rebuild capture history for this frame.
+      const { error: delErr } = await admin
+        .from('frame_captures')
+        .delete()
+        .eq('frame_id', frRow.id);
+      if (delErr) {
+        return {
+          status: 500,
+          message: `frame_captures cleanup failed: ${delErr.message}`,
+        };
+      }
+      const captures: Array<{
+        frame_id: string;
+        app_id: string;
+        build_id: string;
+        image_url: string;
+        captured_at: string;
+        idx: number;
+      }> = [
         {
+          frame_id: frRow.id,
           app_id: appId,
-          flow_id: flow.id,
-          frame_id: frame.id,
-          flow_name: flow.name,
-          frame_name: frame.name,
-          parent_flow_id: flow.parentFlowId ?? null,
-          flow_position: flowPos,
-          frame_position: framePos,
-          latest_image_url: frame.image,
-          latest_build_id: buildId,
+          build_id: buildId,
+          image_url: frame.image,
+          captured_at: manifest.capturedAt ?? new Date().toISOString(),
+          idx: 0,
         },
-        { onConflict: 'app_id,flow_id,frame_id' },
-      );
-      if (frErr) return { status: 500, message: `Frame upsert failed: ${frErr.message}` };
+      ];
+      const versions = frame.versions ?? [];
+      for (let vi = 0; vi < versions.length; vi++) {
+        const v = versions[vi]!;
+        captures.push({
+          frame_id: frRow.id,
+          app_id: appId,
+          build_id: buildId,
+          image_url: v.image,
+          captured_at: v.capturedAt,
+          idx: vi + 1,
+        });
+      }
+      const { error: capInsErr } = await admin
+        .from('frame_captures')
+        .insert(captures);
+      if (capInsErr) {
+        return {
+          status: 500,
+          message: `frame_captures insert failed: ${capInsErr.message}`,
+        };
+      }
     }
   }
 

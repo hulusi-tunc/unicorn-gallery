@@ -181,4 +181,13 @@ export interface ManifestFrameSnapshot {
   /** Index within the flow (smaller = earlier). */
   position?: number;
   image: string;
+  /**
+   * Past captures of this same frame slot, captured before the latest
+   * one (newest first). Mirrors Capture's snap.versions[] array.
+   * Empty/undefined for frames that have only ever been snapped once.
+   */
+  versions?: Array<{
+    image: string;
+    capturedAt: string;
+  }>;
 }

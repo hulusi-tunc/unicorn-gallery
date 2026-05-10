@@ -21,6 +21,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useTheme } from '@/components/providers/theme-provider';
 import { UserAvatar } from '@/components/user-avatar';
 import {
@@ -94,7 +95,11 @@ function ShareDialog({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // Render to body to escape the AppHeader's `backdrop-filter` containing
+  // block — fixed positioning otherwise gets pinned to the header height.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       onClick={onClose}
       style={{
@@ -102,7 +107,7 @@ function ShareDialog({
         inset: 0,
         background: 'rgba(0, 0, 0, 0.5)',
         backdropFilter: 'blur(4px)',
-        zIndex: 50,
+        zIndex: 100,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -194,7 +199,8 @@ function ShareDialog({
           />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { Archive, LogOut, Settings, Shield, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import {
@@ -13,15 +14,36 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { UserAvatar } from '@/components/user-avatar';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { Profile } from '@/lib/db';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
 export function UserMenu({ profile }: { profile: Profile }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
+  const router = useRouter();
 
   const display = profile.name ?? profile.email.split('@')[0] ?? 'User';
   const isAgency = profile.role === 'agency';
+
+  // Browser-side sign-out: clears the local Supabase session immediately,
+  // then hits the route handler to also drop the SSR cookie. The dropdown's
+  // form-based submit fired on Radix's onSelect close, which sometimes
+  // unmounted the form before the POST went through.
+  const handleSignOut = async (): Promise<void> => {
+    try {
+      await getSupabaseBrowserClient().auth.signOut();
+    } catch {
+      // ignore — we'll still hit the server route to be safe.
+    }
+    try {
+      await fetch('/auth/sign-out', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    router.replace('/sign-in');
+    router.refresh();
+  };
 
   return (
     <DropdownMenu>
@@ -105,14 +127,15 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
 
         <DropdownMenuSeparator />
 
-        <form action="/auth/sign-out" method="POST" className="m-0">
-          <DropdownMenuItem asChild>
-            <button type="submit" className="w-full text-left">
-              <LogOut size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
-              Sign out
-            </button>
-          </DropdownMenuItem>
-        </form>
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            void handleSignOut();
+          }}
+        >
+          <LogOut size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
+          Sign out
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

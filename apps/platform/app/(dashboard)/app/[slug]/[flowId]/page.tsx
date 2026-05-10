@@ -2,7 +2,12 @@ import { Camera } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { JourneyStrip } from '@/components/journey-strip';
-import { getAppBySlug, getManifestForApp } from '@/lib/queries';
+import {
+  getAppBySlug,
+  getCurrentProfile,
+  getFreshFrameKeys,
+  getManifestForApp,
+} from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,10 +21,15 @@ export default async function FlowPage({
   const app = await getAppBySlug(decodeURIComponent(slug));
   if (!app) notFound();
 
+  const profile = await getCurrentProfile();
   const manifest = await getManifestForApp(app.id);
   if (!manifest) notFound();
   const flow = manifest.flows.find((f) => f.id === flowId);
   if (!flow) notFound();
+
+  const freshFrameKeys = profile
+    ? await getFreshFrameKeys(profile.id, app.id)
+    : new Set<string>();
 
   return (
     <main className="flex flex-1 flex-col overflow-y-auto bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
@@ -48,7 +58,12 @@ export default async function FlowPage({
           This flow has no frames yet.
         </p>
       ) : (
-        <JourneyStrip flow={flow} platform={manifest.platform} appSlug={app.slug} />
+        <JourneyStrip
+          flow={flow}
+          platform={manifest.platform}
+          appSlug={app.slug}
+          freshFrameKeys={freshFrameKeys}
+        />
       )}
     </main>
   );

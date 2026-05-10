@@ -15,10 +15,9 @@ interface UnicornLogoProps {
 }
 
 /**
- * Brand mark — the H glyph from the Unicorn Studio design system.
- * SVG paths come straight from the design-system source. Uses `currentColor`
- * by default so it adapts to surrounding theme; pass `color` to force the
- * Hubera blue (#1072F5).
+ * Brand mark — Prisma triangle (the shared mark used across desktop Capture
+ * + this gallery). Uses `currentColor` by default so it adapts to the
+ * surrounding theme; pass `color` to force the Hubera blue.
  */
 export function UnicornLogo({
   variant = 'mark',
@@ -57,7 +56,7 @@ export function UnicornLogo({
     return (
       <svg
         height={height}
-        viewBox="0 0 520 594"
+        viewBox="0 0 512 429"
         fill="currentColor"
         xmlns="http://www.w3.org/2000/svg"
         className={className}
@@ -67,7 +66,11 @@ export function UnicornLogo({
         tabIndex={interactive ? 0 : undefined}
         {...handlers}
       >
-        <path d="M488.14 91.2295V230.203H519.979V358.224L477.896 390.053V459.722L424.082 506.05V593.374H69.4199V396.873L0 356.794V230.406H34.6191V91.418L126.036 0H396.909L488.14 91.2295ZM372.262 96.9375H239.772L212.123 69.2871H137.619V166.062L98.0635 205.618V290.871L179.094 346.17V459.458L233.63 491.332H380.326L421.417 457.537V346.17L447.531 320.057V234.034H365.733V346.17H270.879V313.912H333.091V181.423H447.531V107.306L404.712 64.4873L372.262 96.9375ZM383.047 418.194H231.901V386.798H383.047V418.194ZM282.547 181.551V233.847H142.19V213.108L173.747 181.551H282.547Z" />
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M255.254 0L0 429H512L255.254 0ZM255.254 279.523V86.6969L83.5918 379.672L255.254 279.523Z"
+        />
       </svg>
     );
   }
@@ -90,12 +93,16 @@ export function UnicornLogo({
     >
       <svg
         height={height}
-        viewBox="0 0 520 594"
+        viewBox="0 0 512 429"
         fill="currentColor"
         xmlns="http://www.w3.org/2000/svg"
         style={{ display: 'block' }}
       >
-        <path d="M488.14 91.2295V230.203H519.979V358.224L477.896 390.053V459.722L424.082 506.05V593.374H69.4199V396.873L0 356.794V230.406H34.6191V91.418L126.036 0H396.909L488.14 91.2295ZM372.262 96.9375H239.772L212.123 69.2871H137.619V166.062L98.0635 205.618V290.871L179.094 346.17V459.458L233.63 491.332H380.326L421.417 457.537V346.17L447.531 320.057V234.034H365.733V346.17H270.879V313.912H333.091V181.423H447.531V107.306L404.712 64.4873L372.262 96.9375ZM383.047 418.194H231.901V386.798H383.047V418.194ZM282.547 181.551V233.847H142.19V213.108L173.747 181.551H282.547Z" />
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M255.254 0L0 429H512L255.254 0ZM255.254 279.523V86.6969L83.5918 379.672L255.254 279.523Z"
+        />
       </svg>
       <span
         style={{

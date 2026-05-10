@@ -226,6 +226,30 @@ alter table public.frames add column if not exists flow_position int;
 alter table public.frames add column if not exists frame_position int;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- frame_captures — per-frame intra-build version history.
+--
+-- Mirrors Capture's snap.versions[] array: when a designer re-snaps the
+-- same screen multiple times before pushing, each prior capture lands here
+-- so reviewers on the web side can scrub through the iteration history.
+-- Distinct from `frame_versions` which is inter-build (one row per build).
+--
+-- `idx` is 0 for the latest (matches the in-bucket "current" image), 1+
+-- for past captures (newest-first, like Capture's lightbox scrubber).
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.frame_captures (
+  id uuid primary key default gen_random_uuid(),
+  frame_id uuid not null references public.frames(id) on delete cascade,
+  app_id uuid not null references public.apps(id) on delete cascade,
+  build_id uuid references public.builds(id) on delete set null,
+  image_url text not null,
+  captured_at timestamptz not null,
+  idx int not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists frame_captures_frame_idx on public.frame_captures(frame_id, idx);
+create index if not exists frame_captures_app_idx on public.frame_captures(app_id);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- comments — threaded per frame
 -- ─────────────────────────────────────────────────────────────────────────────
 create table if not exists public.comments (
