@@ -70,12 +70,35 @@ export async function POST(request: NextRequest): Promise<Response> {
   // is an agency-internal secret, so re-issuing the project token to a caller
   // who already proved possession of the setup token is acceptable. Avoids
   // designers getting stuck on a 409 when re-running the wizard.
+  //
+  // Also: if the existing row is archived (90-day soft-delete), re-onboarding
+  // counts as an explicit "I want this project back" — auto-restore it. The
+  // designer's intent on +Add is unambiguous, and forcing them to bounce
+  // through the gallery's /archived page just to click Restore would be a
+  // dead-end UX.
   const { data: existing } = await admin
     .from('apps')
-    .select('id, slug, name, platform, project_token')
+    .select('id, slug, name, platform, project_token, archived_at')
     .eq('slug', slug)
     .maybeSingle();
   if (existing) {
+    const wasArchived = Boolean(existing.archived_at);
+    if (wasArchived) {
+      const { error: restoreErr } = await admin
+        .from('apps')
+        .update({
+          archived_at: null,
+          archive_reason: null,
+          archived_by: null,
+        })
+        .eq('id', existing.id);
+      if (restoreErr) {
+        return NextResponse.json(
+          { error: `Auto-restore failed: ${restoreErr.message}` },
+          { status: 500 },
+        );
+      }
+    }
     return NextResponse.json({
       id: existing.id,
       slug: existing.slug,
@@ -83,6 +106,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       platform: existing.platform,
       projectToken: existing.project_token,
       reused: true,
+      restored: wasArchived,
     });
   }
 
