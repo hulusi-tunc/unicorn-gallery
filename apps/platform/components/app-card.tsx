@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
@@ -287,14 +288,12 @@ function PreviewArea({
           }}
         >
           <IPhoneBezel>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={app.preview_image_url}
               alt={app.name}
+              fill
+              sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
               style={{
-                display: 'block',
-                width: '100%',
-                height: '100%',
                 objectFit: 'cover',
                 objectPosition: 'top center',
               }}
@@ -322,14 +321,12 @@ function PreviewArea({
               : '0 18px 38px -18px rgba(15,15,20,0.25)',
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={app.preview_image_url}
           alt={app.name}
+          fill
+          sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
           style={{
-            display: 'block',
-            width: '100%',
-            height: '100%',
             objectFit: 'cover',
             objectPosition: 'top center',
           }}

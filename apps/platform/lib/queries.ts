@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { getSupabaseServerClient } from './supabase/server';
 import type {
   AppRow,
@@ -10,8 +11,14 @@ import type {
   ProfileLite,
 } from './db';
 
-/** Returns the signed-in user's profile, or null if not signed in. */
-export async function getCurrentProfile(): Promise<Profile | null> {
+/**
+ * Returns the signed-in user's profile, or null if not signed in.
+ *
+ * Wrapped in React's `cache()` so the dashboard layout + every child page
+ * that calls this share a single result per request. Saves a Supabase Auth
+ * round-trip + a profiles SELECT per duplicate caller.
+ */
+export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await getSupabaseServerClient();
   const {
     data: { user },
@@ -24,7 +31,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
     .single();
   if (error) return null;
   return data as Profile;
-}
+});
 
 const APP_WITH_STAFF_SELECT = `
   *,
@@ -163,16 +170,18 @@ export async function listFrameCaptures(
  * project's restore page or surfacing the "deleting in N days" banner needs
  * to find them. Filter at the call site if you need active-only.
  */
-export async function getAppBySlug(slug: string): Promise<AppRowWithStaff | null> {
-  const supabase = await getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('apps')
-    .select(APP_WITH_STAFF_SELECT)
-    .eq('slug', slug)
-    .maybeSingle();
-  if (error) return null;
-  return data as unknown as AppRowWithStaff | null;
-}
+export const getAppBySlug = cache(
+  async (slug: string): Promise<AppRowWithStaff | null> => {
+    const supabase = await getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from('apps')
+      .select(APP_WITH_STAFF_SELECT)
+      .eq('slug', slug)
+      .maybeSingle();
+    if (error) return null;
+    return data as unknown as AppRowWithStaff | null;
+  },
+);
 
 /**
  * Admin-only: lists every profile (agency + customer) for the admin users
@@ -201,7 +210,7 @@ export async function listAgencyProfiles(): Promise<ProfileLite[]> {
   return (data ?? []) as ProfileLite[];
 }
 
-export async function getLatestBuild(appId: string): Promise<Build | null> {
+export const getLatestBuild = cache(async (appId: string): Promise<Build | null> => {
   const supabase = await getSupabaseServerClient();
   const { data, error } = await supabase
     .from('builds')
@@ -213,7 +222,7 @@ export async function getLatestBuild(appId: string): Promise<Build | null> {
     .maybeSingle();
   if (error) return null;
   return data as Build | null;
-}
+});
 
 /**
  * Per-frame unread comment count for the current user.
@@ -261,22 +270,31 @@ async function computeUnreadCountsClient(userId: string): Promise<Map<string, nu
 }
 
 /**
- * Per-app unread notification counts for the current user. Used to drop a
- * "X new" badge on each AppCard.
+ * Per-app unread notification counts for the current user, plus the total
+ * across all apps for the topbar bell badge. Returned together so the
+ * dashboard load makes ONE notifications query instead of two.
  */
-export async function getUnreadCountsByApp(userId: string): Promise<Map<string, number>> {
+export const getUnreadOverview = cache(async (
+  userId: string,
+): Promise<{ total: number; byApp: Map<string, number> }> => {
   const supabase = await getSupabaseServerClient();
   const { data, error } = await supabase
     .from('notifications')
     .select('app_id')
     .eq('user_id', userId)
     .is('seen_at', null);
-  if (error || !data) return new Map();
-  const m = new Map<string, number>();
+  if (error || !data) return { total: 0, byApp: new Map() };
+  const byApp = new Map<string, number>();
   for (const row of data as Array<{ app_id: string }>) {
-    m.set(row.app_id, (m.get(row.app_id) ?? 0) + 1);
+    byApp.set(row.app_id, (byApp.get(row.app_id) ?? 0) + 1);
   }
-  return m;
+  return { total: data.length, byApp };
+});
+
+/** @deprecated — prefer getUnreadOverview. Kept for backwards compatibility. */
+export async function getUnreadCountsByApp(userId: string): Promise<Map<string, number>> {
+  const { byApp } = await getUnreadOverview(userId);
+  return byApp;
 }
 
 /**
@@ -310,16 +328,15 @@ export async function getUnreadByFlowAndFrameForApp(
   return { byFlow, byFrame };
 }
 
-/** Total unread comments across every visible app, for the topbar bell badge. */
+/**
+ * Total unread comments across every visible app, for the topbar bell badge.
+ * Routes through `getUnreadOverview` which is request-cached, so calling this
+ * in the dashboard layout AND `getUnreadCountsByApp` in the page costs only
+ * one notifications query.
+ */
 export async function getTotalUnreadCount(userId: string): Promise<number> {
-  const supabase = await getSupabaseServerClient();
-  const { count, error } = await supabase
-    .from('notifications')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .is('seen_at', null);
-  if (error || count == null) return 0;
-  return count;
+  const { total } = await getUnreadOverview(userId);
+  return total;
 }
 
 export interface NotificationFeedItem {
@@ -476,9 +493,9 @@ export async function listFramesForApp(appId: string): Promise<Frame[]> {
  *
  * Returns null if there are no frames for the app yet.
  */
-export async function getManifestForApp(
+export const getManifestForApp = cache(async (
   appId: string,
-): Promise<ManifestSnapshot | null> {
+): Promise<ManifestSnapshot | null> => {
   const [latestBuild, frames] = await Promise.all([
     getLatestBuild(appId),
     listFramesForApp(appId),
@@ -528,7 +545,7 @@ export async function getManifestForApp(
       })),
     })),
   };
-}
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Version history

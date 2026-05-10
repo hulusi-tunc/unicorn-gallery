@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import type {
   ManifestFlow,
@@ -99,14 +100,12 @@ function JourneyCard({
             className="group-hover:[filter:drop-shadow(0_28px_44px_rgba(15,15,20,0.28))_drop-shadow(0_8px_14px_rgba(15,15,20,0.14))] dark:[filter:drop-shadow(0_18px_32px_rgba(0,0,0,0.5))_drop-shadow(0_6px_12px_rgba(0,0,0,0.3))] dark:group-hover:[filter:drop-shadow(0_28px_44px_rgba(0,0,0,0.65))_drop-shadow(0_8px_14px_rgba(0,0,0,0.4))]"
           >
             <IPhoneBezel>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <Image
                 src={imageHref(frame.image)}
                 alt={frame.name}
+                fill
+                sizes="240px"
                 style={{
-                  display: 'block',
-                  width: '100%',
-                  height: '100%',
                   objectFit: 'cover',
                   objectPosition: 'top center',
                 }}
@@ -116,14 +115,15 @@ function JourneyCard({
           </div>
         ) : (
           <div
-            style={{ height: WEB_CARD_HEIGHT, width: WEB_CARD_WIDTH }}
+            style={{ height: WEB_CARD_HEIGHT, width: WEB_CARD_WIDTH, position: 'relative' }}
             className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50 shadow-md transition-all group-hover:border-neutral-400 group-hover:shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:group-hover:border-neutral-600"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={imageHref(frame.image)}
               alt={frame.name}
-              className="h-full w-full object-cover object-top"
+              fill
+              sizes="360px"
+              className="object-cover object-top"
               loading="lazy"
             />
           </div>

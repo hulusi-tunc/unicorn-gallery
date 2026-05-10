@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import type {
@@ -95,14 +96,12 @@ function FilmstripCell({
           }}
         >
           <IPhoneBezel>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={imageHref(frame.image)}
               alt={frame.name}
+              fill
+              sizes="96px"
               style={{
-                display: 'block',
-                width: '100%',
-                height: '100%',
                 objectFit: 'cover',
                 objectPosition: 'top center',
               }}
@@ -112,7 +111,7 @@ function FilmstripCell({
         </div>
       ) : (
         <div
-          style={{ height: WEB_CELL_HEIGHT, width: WEB_CELL_WIDTH }}
+          style={{ height: WEB_CELL_HEIGHT, width: WEB_CELL_WIDTH, position: 'relative' }}
           className={cn(
             'overflow-hidden rounded transition-all',
             active
@@ -120,11 +119,12 @@ function FilmstripCell({
               : 'ring-1 ring-neutral-200 group-hover:ring-neutral-400 dark:ring-neutral-800 dark:group-hover:ring-neutral-600',
           )}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={imageHref(frame.image)}
             alt={frame.name}
-            className="h-full w-full object-cover object-top"
+            fill
+            sizes="160px"
+            className="object-cover object-top"
             loading="lazy"
           />
         </div>

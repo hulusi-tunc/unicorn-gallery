@@ -13,7 +13,10 @@ import type {
   ManifestSnapshot,
 } from '@/lib/db';
 
-export const dynamic = 'force-dynamic';
+// Public token-gated route — no per-request auth, so we can cache aggressively.
+// 60s revalidate strikes a balance: customers see new pushes within a minute,
+// agency users still get instant feedback on their authenticated views.
+export const revalidate = 60;
 
 interface FlowNode {
   flow: ManifestFlow;
