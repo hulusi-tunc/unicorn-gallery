@@ -6,6 +6,8 @@
   "description": "Multi-tenant Mobbin-style gallery platform. Apps grid + per-app dashboards + comments + admin + Supabase magic-link auth.",
   "scripts": {
     "dev": "next dev -p 3010",
+    "dev:clean": "rm -rf .next && next dev -p 3010",
+    "clean": "rm -rf .next",
     "build": "next build",
     "start": "next start -p 3010",
     "typecheck": "tsc --noEmit",

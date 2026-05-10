@@ -1,6 +1,6 @@
 'use client';
 
-import { LogOut, Settings, Shield, User as UserIcon } from 'lucide-react';
+import { Archive, LogOut, Settings, Shield, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
@@ -92,6 +92,12 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
               <Link href="/admin">
                 <Shield size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
                 Team & access
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/archived">
+                <Archive size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
+                Archived projects
               </Link>
             </DropdownMenuItem>
           </>

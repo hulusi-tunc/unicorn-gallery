@@ -28,6 +28,30 @@ export interface AppRow {
   designer_id: string | null;
   pm_id: string | null;
   public_share_token: string | null;
+  /**
+   * Archive lifecycle. NULL = active (default). Non-null = soft-deleted at
+   * this timestamp; restorable until +90 days, after which the daily cron
+   * hard-deletes everything (rows + storage). See lib/actions/archive.ts.
+   */
+  archived_at: string | null;
+  archive_reason: string | null;
+  archived_by: string | null;
+}
+
+/** Hard-delete grace period — 90 days. Tweak if business policy changes. */
+export const ARCHIVE_GRACE_DAYS = 90;
+
+/** Compute when an archived app will be permanently deleted. */
+export function archiveDeleteAt(archivedAt: string): Date {
+  const t = new Date(archivedAt);
+  t.setUTCDate(t.getUTCDate() + ARCHIVE_GRACE_DAYS);
+  return t;
+}
+
+/** Days remaining before an archived app is hard-deleted (negative if overdue). */
+export function archiveDaysRemaining(archivedAt: string): number {
+  const ms = archiveDeleteAt(archivedAt).getTime() - Date.now();
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
 }
 
 /** Lightweight profile used in lookups (avatar / chip rendering). */

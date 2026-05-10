@@ -113,6 +113,19 @@ alter table public.apps add column if not exists public_share_token text unique;
 create index if not exists apps_public_share_token_idx on public.apps(public_share_token);
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- Archive lifecycle (soft-delete with 90-day grace period)
+--
+-- archived_at is set by /api/projects/:slug/archive. While non-null, the app
+-- is hidden from default queries (lists, dashboards) but its rows + storage
+-- stay intact so users can /restore within the grace window. A daily cron
+-- hard-deletes apps whose archived_at is older than 90 days.
+-- ─────────────────────────────────────────────────────────────────────────────
+alter table public.apps add column if not exists archived_at timestamptz;
+alter table public.apps add column if not exists archive_reason text;
+alter table public.apps add column if not exists archived_by uuid references public.profiles(id) on delete set null;
+create index if not exists apps_archived_at_idx on public.apps(archived_at) where archived_at is not null;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- app_customers — customers can only see apps they're added to
 -- ─────────────────────────────────────────────────────────────────────────────
 create table if not exists public.app_customers (

@@ -32,17 +32,50 @@ const APP_WITH_STAFF_SELECT = `
   pm:profiles!apps_pm_id_fkey(id, email, name, flavor, avatar_url)
 `;
 
-/** Lists apps visible to the current user (via RLS), with designer+PM joined. */
-export async function listVisibleApps(): Promise<AppRowWithStaff[]> {
+/**
+ * Lists apps visible to the current user (via RLS), with designer+PM joined.
+ *
+ * Archive-aware: archived apps are hidden by default. Pass
+ * `{ includeArchived: true }` to surface them (used by the "Archived" admin
+ * view and by listArchivedApps below) or `{ archivedOnly: true }` to fetch
+ * only the archived set.
+ */
+export async function listVisibleApps(options?: {
+  includeArchived?: boolean;
+  archivedOnly?: boolean;
+}): Promise<AppRowWithStaff[]> {
   const supabase = await getSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('apps')
     .select(APP_WITH_STAFF_SELECT)
     .order('created_at', { ascending: false });
+  if (options?.archivedOnly) {
+    query = query.not('archived_at', 'is', null);
+  } else if (!options?.includeArchived) {
+    query = query.is('archived_at', null);
+  }
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as unknown as AppRowWithStaff[];
 }
 
+/** Same as listVisibleApps but only the archived rows, newest-archived first. */
+export async function listArchivedApps(): Promise<AppRowWithStaff[]> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('apps')
+    .select(APP_WITH_STAFF_SELECT)
+    .not('archived_at', 'is', null)
+    .order('archived_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as AppRowWithStaff[];
+}
+
+/**
+ * Look up an app by slug. Returns archived rows too — viewing an archived
+ * project's restore page or surfacing the "deleting in N days" banner needs
+ * to find them. Filter at the call site if you need active-only.
+ */
 export async function getAppBySlug(slug: string): Promise<AppRowWithStaff | null> {
   const supabase = await getSupabaseServerClient();
   const { data, error } = await supabase

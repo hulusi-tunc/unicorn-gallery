@@ -30,11 +30,18 @@ export async function findAppByToken(
   const admin = getSupabaseAdminClient();
   const { data, error } = await admin
     .from('apps')
-    .select('id, slug, platform, project_token')
+    .select('id, slug, platform, project_token, archived_at')
     .eq('project_token', token.trim())
     .maybeSingle();
   if (error) return { status: 500, message: error.message };
   if (!data) return { status: 403, message: 'Invalid project token.' };
+  if (data.archived_at) {
+    return {
+      status: 410,
+      message:
+        'This project is archived. Restore it on the gallery before pushing snaps.',
+    };
+  }
   return { id: data.id, slug: data.slug, platform: data.platform };
 }
 
