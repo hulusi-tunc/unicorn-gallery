@@ -22,7 +22,6 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
 
   const display = profile.name ?? profile.email.split('@')[0] ?? 'User';
   const isAgency = profile.role === 'agency';
-  const isAdmin = isAgency && profile.is_admin;
 
   return (
     <DropdownMenu>
@@ -64,7 +63,7 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
             className="mt-1.5 inline-block rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em]"
             style={{ background: t.accentSubtle, color: t.accent }}
           >
-            {isAdmin ? 'ADMIN' : isAgency ? 'AGENCY' : 'CUSTOMER'}
+            {isAgency ? 'UNICORN' : 'CUSTOMER'}
             {profile.flavor ? ` · ${profile.flavor.toUpperCase()}` : ''}
           </span>
         </div>
@@ -85,10 +84,10 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
           </Link>
         </DropdownMenuItem>
 
-        {isAdmin ? (
+        {isAgency ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel>Admin</DropdownMenuLabel>
+            <DropdownMenuLabel>Team</DropdownMenuLabel>
             <DropdownMenuItem asChild>
               <Link href="/admin">
                 <Shield size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />

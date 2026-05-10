@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, Mail, Shield, User as UserIcon } from 'lucide-react';
+import { Loader2, Lock, Mail, Shield, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
@@ -14,15 +14,17 @@ export function SignUpClient(): ReactNode {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [flavor, setFlavor] = useState<'designer' | 'non-designer'>('designer');
   const [code, setCode] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [signInUrl, setSignInUrl] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
 
   const formValid =
     name.trim().length >= 2 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
+    password.length >= 8 &&
     code.trim().length > 0;
 
   async function onSubmit(e: FormEvent): Promise<void> {
@@ -33,11 +35,11 @@ export function SignUpClient(): ReactNode {
       const res = await fetch('/api/sign-up', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, email, role: 'agency', flavor, code }),
+        body: JSON.stringify({ name, email, password, role: 'agency', flavor, code }),
       });
-      const data = (await res.json()) as { error?: string; signInUrl?: string };
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Sign-up failed.');
-      setSignInUrl(data.signInUrl ?? '/sign-in');
+      setDone(true);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -73,8 +75,8 @@ export function SignUpClient(): ReactNode {
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
-          {signInUrl ? (
-            <SuccessNotice email={email} signInUrl={signInUrl} t={t} />
+          {done ? (
+            <SuccessNotice email={email} t={t} />
           ) : (
             <>
               <Eyebrow>Create account</Eyebrow>
@@ -123,6 +125,17 @@ export function SignUpClient(): ReactNode {
                     value={email}
                     onChange={(e) => setEmail(e.currentTarget.value)}
                     placeholder="you@studio.com"
+                  />
+                </Field>
+
+                <Field label="Password (min 8 chars)" icon={<Lock size={11} />} t={t}>
+                  <TextInput
+                    type="password"
+                    size="lg"
+                    value={password}
+                    onChange={(e) => setPassword(e.currentTarget.value)}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
                   />
                 </Field>
 
@@ -318,11 +331,9 @@ function FlavorSelector({
 
 function SuccessNotice({
   email,
-  signInUrl,
   t,
 }: {
   email: string;
-  signInUrl: string;
   t: ReturnType<typeof getNd>;
 }): ReactNode {
   return (
@@ -360,10 +371,10 @@ function SuccessNotice({
         }}
       >
         We provisioned <span style={{ color: t.textDisplay, fontWeight: 500 }}>{email}</span>.
-        Click below to sign in directly (dev mode bypasses the email step).
+        Sign in with your email + password to enter the studio.
       </p>
       <Link
-        href={signInUrl}
+        href={`/sign-in?email=${encodeURIComponent(email)}`}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -380,7 +391,7 @@ function SuccessNotice({
           fontWeight: 500,
         }}
       >
-        Sign in as {email.split('@')[0]}
+        Sign in
       </Link>
     </div>
   );

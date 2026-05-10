@@ -26,11 +26,11 @@ create table if not exists public.profiles (
 alter table public.profiles add column if not exists flavor text;
 -- Avatar URL stored in Supabase Storage (avatars bucket). Public URL.
 alter table public.profiles add column if not exists avatar_url text;
--- Admin tier: a subset of agency users who can manage staffing + invite/remove others.
-alter table public.profiles add column if not exists is_admin boolean not null default false;
+-- All agency users have equal permissions. Drop the legacy is_admin tier.
+alter table public.profiles drop column if exists is_admin;
 
--- Always keep the founder admin so we never lock ourselves out.
-update public.profiles set role = 'agency', is_admin = true
+-- Keep the founder pinned to agency role so we never lock ourselves out.
+update public.profiles set role = 'agency'
   where email = 'hulusitunc1@gmail.com';
 
 -- Pending role assignments — when an agency user signs up via /sign-up
@@ -107,6 +107,10 @@ alter table public.apps add column if not exists designer_id uuid references pub
 alter table public.apps add column if not exists pm_id uuid references public.profiles(id) on delete set null;
 create index if not exists apps_designer_idx on public.apps(designer_id);
 create index if not exists apps_pm_idx on public.apps(pm_id);
+-- Optional public-share token. NULL = private (default); non-null = anyone with
+-- the token URL can view this app read-only at /shared/<token>.
+alter table public.apps add column if not exists public_share_token text unique;
+create index if not exists apps_public_share_token_idx on public.apps(public_share_token);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- app_customers — customers can only see apps they're added to
@@ -241,18 +245,7 @@ as $$
   );
 $$;
 
-create or replace function public.is_admin()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select coalesce(
-    (select is_admin and role = 'agency' from public.profiles where id = auth.uid()),
-    false
-  );
-$$;
+drop function if exists public.is_admin();
 
 create or replace function public.is_app_customer(p_app_id uuid)
 returns boolean
@@ -370,3 +363,130 @@ create policy comments_author_update on public.comments for update
 drop policy if exists comments_author_delete on public.comments;
 create policy comments_author_delete on public.comments for delete
   using (author_id = auth.uid() or public.is_agency());
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- frame_reads — last time each user opened a given frame. Used to compute
+-- which comments are "unread" for indicator badges.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.frame_reads (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  frame_id uuid not null references public.frames(id) on delete cascade,
+  last_read_at timestamptz not null default now(),
+  primary key (user_id, frame_id)
+);
+create index if not exists frame_reads_user_idx on public.frame_reads(user_id, last_read_at desc);
+
+alter table public.frame_reads enable row level security;
+drop policy if exists frame_reads_self on public.frame_reads;
+create policy frame_reads_self on public.frame_reads for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- notifications — one row per recipient per relevant event. Inserted by
+-- a trigger on comments.
+-- ─────────────────────────────────────────────────────────────────────────────
+do $$ begin
+  if not exists (select 1 from pg_type where typname = 'notification_kind') then
+    create type public.notification_kind as enum ('comment', 'mention', 'reply');
+  end if;
+end $$;
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  kind public.notification_kind not null,
+  comment_id uuid not null references public.comments(id) on delete cascade,
+  frame_id uuid not null references public.frames(id) on delete cascade,
+  app_id uuid not null references public.apps(id) on delete cascade,
+  actor_id uuid references public.profiles(id) on delete set null,
+  seen_at timestamptz,
+  created_at timestamptz not null default now()
+);
+-- Drop legacy email digest column if it lingered from a prior migration.
+alter table public.notifications drop column if exists emailed_at;
+create index if not exists notifications_user_unseen_idx
+  on public.notifications(user_id, created_at desc) where seen_at is null;
+create index if not exists notifications_user_idx
+  on public.notifications(user_id, created_at desc);
+
+alter table public.notifications enable row level security;
+drop policy if exists notifications_self_select on public.notifications;
+create policy notifications_self_select on public.notifications for select
+  using (user_id = auth.uid());
+drop policy if exists notifications_self_update on public.notifications;
+create policy notifications_self_update on public.notifications for update
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Trigger: when a comment lands, fan out notification rows to every
+-- agency user + every customer linked to the comment's app. Skip the
+-- comment's author (no self-pings). Mentions are layered on top in
+-- application code (server action also inserts 'mention' rows for
+-- explicit @mentions parsed from the body).
+create or replace function public.fanout_comment_notifications()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_app_id uuid;
+  v_parent_author uuid;
+begin
+  -- Resolve app_id from the frame.
+  select app_id into v_app_id from public.frames where id = new.frame_id;
+  if v_app_id is null then
+    return new;
+  end if;
+
+  -- Reply: notify the parent comment's author (if not self).
+  if new.parent_id is not null then
+    select author_id into v_parent_author from public.comments where id = new.parent_id;
+    if v_parent_author is not null and v_parent_author <> new.author_id then
+      insert into public.notifications (user_id, kind, comment_id, frame_id, app_id, actor_id)
+      values (v_parent_author, 'reply', new.id, new.frame_id, v_app_id, new.author_id);
+    end if;
+  end if;
+
+  -- Generic 'comment' notification to every agency user (excluding author + parent author).
+  insert into public.notifications (user_id, kind, comment_id, frame_id, app_id, actor_id)
+  select p.id, 'comment', new.id, new.frame_id, v_app_id, new.author_id
+    from public.profiles p
+    where p.role = 'agency'
+      and p.id <> new.author_id
+      and (v_parent_author is null or p.id <> v_parent_author);
+
+  -- And every customer linked to this app (excluding author + parent author).
+  insert into public.notifications (user_id, kind, comment_id, frame_id, app_id, actor_id)
+  select ac.user_id, 'comment', new.id, new.frame_id, v_app_id, new.author_id
+    from public.app_customers ac
+    where ac.app_id = v_app_id
+      and ac.user_id <> new.author_id
+      and (v_parent_author is null or ac.user_id <> v_parent_author);
+
+  return new;
+end;
+$$;
+
+drop trigger if exists comments_fanout on public.comments;
+create trigger comments_fanout
+  after insert on public.comments
+  for each row execute function public.fanout_comment_notifications();
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Realtime — opt these tables into Supabase's realtime publication so the
+-- web app can subscribe to live INSERT/UPDATE events for comments + bell.
+-- ─────────────────────────────────────────────────────────────────────────────
+do $$ begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'comments'
+  ) then
+    execute 'alter publication supabase_realtime add table public.comments';
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notifications'
+  ) then
+    execute 'alter publication supabase_realtime add table public.notifications';
+  end if;
+end $$;

@@ -1,6 +1,6 @@
 'use client';
 
-import { Moon, Search, Sun } from 'lucide-react';
+import { Bell, Moon, Search, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
@@ -16,7 +16,13 @@ import {
 
 export const TOPNAV_HEIGHT = 60;
 
-export function DashboardTopNav({ profile }: { profile: Profile }): ReactNode {
+export function DashboardTopNav({
+  profile,
+  unreadCount = 0,
+}: {
+  profile: Profile;
+  unreadCount?: number;
+}): ReactNode {
   const { theme, toggle } = useTheme();
   const t = getNd(theme);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -132,6 +138,62 @@ export function DashboardTopNav({ profile }: { profile: Profile }): ReactNode {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
+        <Link
+          href="/notifications"
+          aria-label={
+            unreadCount > 0
+              ? `Notifications (${unreadCount} unread)`
+              : 'Notifications'
+          }
+          title={
+            unreadCount > 0
+              ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
+              : 'Notifications'
+          }
+          style={{
+            position: 'relative',
+            width: 36,
+            height: 36,
+            borderRadius: swatchRadii.full,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: t.textPrimary,
+            textDecoration: 'none',
+            transition: 'background 120ms ease-out',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = t.surfaceInk)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        >
+          <Bell size={16} />
+          {unreadCount > 0 ? (
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                top: 6,
+                right: 6,
+                minWidth: 16,
+                height: 16,
+                padding: '0 4px',
+                borderRadius: 999,
+                background: t.accent,
+                color: 'white',
+                fontFamily: editorialFonts.mono,
+                fontSize: 9,
+                fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: `2px solid ${t.black}`,
+                lineHeight: 1,
+              }}
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          ) : null}
+        </Link>
         <IconButton onClick={toggle} aria-label="Toggle theme" t={t}>
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
         </IconButton>

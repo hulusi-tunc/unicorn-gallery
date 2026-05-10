@@ -11,7 +11,6 @@ export interface Profile {
   role: Role;
   flavor: string | null;
   avatar_url: string | null;
-  is_admin: boolean;
   created_at: string;
 }
 
@@ -28,6 +27,7 @@ export interface AppRow {
   created_at: string;
   designer_id: string | null;
   pm_id: string | null;
+  public_share_token: string | null;
 }
 
 /** Lightweight profile used in lookups (avatar / chip rendering). */
@@ -37,7 +37,6 @@ export interface ProfileLite {
   name: string | null;
   flavor: string | null;
   avatar_url: string | null;
-  is_admin?: boolean;
 }
 
 /** AppRow with optional designer + PM profiles joined in. */
@@ -108,6 +107,26 @@ export interface Comment {
   resolved_at: string | null;
   resolved_by: string | null;
   created_at: string;
+}
+
+export type NotificationKind = 'comment' | 'mention' | 'reply';
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  kind: NotificationKind;
+  comment_id: string;
+  frame_id: string;
+  app_id: string;
+  actor_id: string | null;
+  seen_at: string | null;
+  created_at: string;
+}
+
+export interface FrameRead {
+  user_id: string;
+  frame_id: string;
+  last_read_at: string;
 }
 
 export interface ManifestSnapshot {

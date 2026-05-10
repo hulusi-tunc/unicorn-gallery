@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from '@/lib/supabase/server';
 interface Body {
   name?: string;
   email?: string;
+  password?: string;
   role?: 'agency' | 'customer';
   flavor?: 'designer' | 'non-designer';
   code?: string;
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const email = body.email?.trim().toLowerCase();
   const name = body.name?.trim();
+  const password = body.password ?? '';
   const role = body.role ?? 'customer';
   const flavor = body.flavor === 'non-designer' ? 'non-designer' : 'designer';
 
@@ -29,6 +31,9 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
   if (!name || name.length < 2) {
     return NextResponse.json({ error: 'Name is required.' }, { status: 400 });
+  }
+  if (password.length < 8) {
+    return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 });
   }
   if (role !== 'agency' && role !== 'customer') {
     return NextResponse.json({ error: 'Invalid role.' }, { status: 400 });
@@ -60,6 +65,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   if (!existing) {
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
+      password,
       email_confirm: true,
       user_metadata: { name },
     });
@@ -74,13 +80,11 @@ export async function POST(request: NextRequest): Promise<Response> {
         .eq('id', created.user.id);
     }
   } else {
-    // User exists — make sure profile.role/name/flavor are set.
+    // User exists — update password + profile.role/name/flavor.
+    await admin.auth.admin.updateUserById(existing.id, { password });
     await admin.from('profiles').update({ role, name, flavor }).eq('id', existing.id);
     await admin.from('pending_role_assignments').delete().eq('email', email);
   }
 
-  // Build a dev sign-in URL the form can redirect to (skips email verification).
-  const signInUrl = `/api/dev/sign-in?email=${encodeURIComponent(email)}`;
-
-  return NextResponse.json({ ok: true, signInUrl });
+  return NextResponse.json({ ok: true });
 }

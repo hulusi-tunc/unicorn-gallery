@@ -15,7 +15,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { assignStaff } from '@/lib/actions/assign-staff';
+import { ShareButton } from '@/components/share-button';
 import type { AppRowWithStaff, ProfileLite } from '@/lib/db';
+import type { AppCustomerWithProfile } from '@/lib/queries';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
 const PLATFORM_LABEL: Record<AppRowWithStaff['platform'], string> = {
@@ -31,6 +33,7 @@ export function AppHeader({
   canEdit,
   latestVersion,
   latestVersionAt,
+  customers,
 }: {
   app: AppRowWithStaff;
   // Manifest used to be displayed (build SHA + capture date) — no longer shown.
@@ -39,6 +42,7 @@ export function AppHeader({
   canEdit: boolean;
   latestVersion: number | null;
   latestVersionAt: string | null;
+  customers: AppCustomerWithProfile[];
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
@@ -157,6 +161,16 @@ export function AppHeader({
           gap: 8,
         }}
       >
+        {canEdit ? (
+          <ShareButton
+            appId={app.id}
+            appSlug={app.slug}
+            appName={app.name}
+            publicShareToken={app.public_share_token}
+            customers={customers}
+          />
+        ) : null}
+
         {latestVersion != null ? (
           <Link
             href={`/app/${encodeURIComponent(app.slug)}/history`}

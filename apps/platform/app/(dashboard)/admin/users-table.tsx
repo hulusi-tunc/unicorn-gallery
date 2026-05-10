@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, Mail, MoreHorizontal, Plus, Shield, Trash2, UserMinus, UserPlus } from 'lucide-react';
+import { Loader2, Mail, MoreHorizontal, Plus, Trash2, UserMinus, UserPlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, type FormEvent, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
@@ -13,11 +13,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { UserAvatar } from '@/components/user-avatar';
-import { addTeammate, kickUser, setAdmin, setRole } from '@/lib/actions/admin';
+import { addTeammate, kickUser, setRole } from '@/lib/actions/admin';
 import type { Profile } from '@/lib/db';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
-const HARDCODED_ADMIN = 'hulusitunc1@gmail.com';
+const HARDCODED_FOUNDER = 'hulusitunc1@gmail.com';
 
 export function UsersTable({
   profiles,
@@ -30,7 +30,7 @@ export function UsersTable({
   const t = getNd(theme);
   const [showInvite, setShowInvite] = useState(false);
 
-  const agency = profiles.filter((p) => p.role === 'agency');
+  const unicorns = profiles.filter((p) => p.role === 'agency');
   const customers = profiles.filter((p) => p.role === 'customer');
 
   return (
@@ -44,7 +44,7 @@ export function UsersTable({
             className="font-mono text-[11px] uppercase tracking-[0.12em]"
             style={{ color: t.textSecondary }}
           >
-            Admin
+            Team
           </p>
           <h1
             className="mt-1 text-3xl"
@@ -58,7 +58,7 @@ export function UsersTable({
             Team & access
           </h1>
           <p className="mt-1 text-sm" style={{ color: t.textSecondary }}>
-            Add teammates, set who&rsquo;s an admin, remove people who&rsquo;ve left.
+            Add Unicorns, remove people who&rsquo;ve left. Customers are invited per-app from the project page.
           </p>
         </div>
         <button
@@ -66,7 +66,7 @@ export function UsersTable({
           onClick={() => setShowInvite(true)}
           style={primaryButton(t)}
         >
-          <Plus size={14} /> Invite teammate
+          <Plus size={14} /> Add Unicorn
         </button>
       </div>
 
@@ -74,8 +74,8 @@ export function UsersTable({
         <InviteForm t={t} onClose={() => setShowInvite(false)} />
       ) : null}
 
-      <Section title="Agency team" count={agency.length} t={t}>
-        {agency.map((p) => (
+      <Section title="Unicorns" count={unicorns.length} t={t}>
+        {unicorns.map((p) => (
           <Row
             key={p.id}
             profile={p}
@@ -171,7 +171,7 @@ function Row({
   const [error, setError] = useState<string | null>(null);
 
   const isMe = profile.id === currentUserId;
-  const isFounder = profile.email === HARDCODED_ADMIN;
+  const isFounder = profile.email === HARDCODED_FOUNDER;
   const display = profile.name?.trim() || profile.email.split('@')[0];
 
   function run(action: () => Promise<{ ok?: true; error?: string }>): void {
@@ -206,7 +206,7 @@ function Row({
           >
             {display}
           </span>
-          {profile.is_admin ? (
+          {isFounder ? (
             <span
               style={{
                 fontFamily: editorialFonts.mono,
@@ -219,7 +219,7 @@ function Row({
                 borderRadius: 999,
               }}
             >
-              Admin
+              Founder
             </span>
           ) : null}
           {profile.flavor ? (
@@ -285,32 +285,13 @@ function Row({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={6}>
-          <DropdownMenuLabel>Permissions</DropdownMenuLabel>
-          {profile.role === 'agency' && !profile.is_admin ? (
-            <DropdownMenuItem
-              onSelect={() => run(() => setAdmin({ profileId: profile.id, isAdmin: true }))}
-            >
-              <Shield size={14} className="mr-2" style={{ color: t.textSecondary }} />
-              Promote to admin
-            </DropdownMenuItem>
-          ) : null}
-          {profile.role === 'agency' && profile.is_admin ? (
-            <DropdownMenuItem
-              onSelect={() => run(() => setAdmin({ profileId: profile.id, isAdmin: false }))}
-            >
-              <UserMinus size={14} className="mr-2" style={{ color: t.textSecondary }} />
-              Demote to designer
-            </DropdownMenuItem>
-          ) : null}
-
-          <DropdownMenuSeparator />
           <DropdownMenuLabel>Tier</DropdownMenuLabel>
           {profile.role === 'customer' ? (
             <DropdownMenuItem
               onSelect={() => run(() => setRole({ profileId: profile.id, role: 'agency' }))}
             >
               <UserPlus size={14} className="mr-2" style={{ color: t.textSecondary }} />
-              Make agency
+              Make Unicorn
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem
@@ -359,7 +340,6 @@ function InviteForm({
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [flavor, setFlavor] = useState<'designer' | 'non-designer'>('designer');
-  const [makeAdmin, setMakeAdmin] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
@@ -373,7 +353,6 @@ function InviteForm({
         email,
         name: name || undefined,
         flavor,
-        isAdmin: makeAdmin,
       });
       if (res.error) setError(res.error);
       else {
@@ -401,7 +380,7 @@ function InviteForm({
             color: t.textDisplay,
           }}
         >
-          Invite teammate
+          Add Unicorn
         </h2>
         <button
           type="button"
@@ -471,33 +450,6 @@ function InviteForm({
           })}
         </div>
       </Field>
-
-      <label
-        className="flex items-center gap-3 rounded-md p-3 cursor-pointer"
-        style={{ background: t.surface, border: `1px solid ${t.border}` }}
-      >
-        <input
-          type="checkbox"
-          checked={makeAdmin}
-          onChange={(e) => setMakeAdmin(e.currentTarget.checked)}
-          style={{ accentColor: t.accent }}
-        />
-        <div>
-          <p
-            style={{
-              fontSize: 13,
-              fontWeight: 500,
-              color: t.textDisplay,
-              margin: 0,
-            }}
-          >
-            Make admin
-          </p>
-          <p style={{ fontSize: 11, color: t.textSecondary, margin: 0 }}>
-            Admins can edit Designer/PM and manage team members.
-          </p>
-        </div>
-      </label>
 
       {error ? <p style={{ fontSize: 12, color: t.danger }}>{error}</p> : null}
       {signedUrl ? (

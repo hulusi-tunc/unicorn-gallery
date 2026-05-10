@@ -14,8 +14,8 @@ interface AssignInput {
 
 export async function assignStaff(input: AssignInput): Promise<{ ok?: true; error?: string }> {
   const profile = await getCurrentProfile();
-  if (!profile || profile.role !== 'agency' || !profile.is_admin) {
-    return { error: 'Only admins can assign Designer / PM.' };
+  if (!profile || profile.role !== 'agency') {
+    return { error: 'Only agency members can assign Designer / PM.' };
   }
 
   if (input.field !== 'designer_id' && input.field !== 'pm_id') {

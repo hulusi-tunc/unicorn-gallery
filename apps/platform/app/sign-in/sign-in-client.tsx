@@ -1,7 +1,8 @@
 'use client';
 
-import { Loader2, Mail } from 'lucide-react';
+import { Loader2, Lock, Mail } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import { UnicornLogo } from '@/components/brand/unicorn-logo';
@@ -20,32 +21,33 @@ export function SignInClient({
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
+  const router = useRouter();
+  const params = useSearchParams();
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(params.get('email') ?? '');
+  const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
-  const [sent, setSent] = useState(false);
 
-  const valid = EMAIL_RE.test(email.trim());
+  const valid = EMAIL_RE.test(email.trim()) && password.length > 0;
 
   async function onSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
     if (!valid) {
-      setError('Please enter a valid email.');
+      setError('Email and password are required.');
       return;
     }
     setPending(true);
     setError(null);
     try {
       const supabase = getSupabaseBrowserClient();
-      const callback = new URL('/auth/callback', window.location.origin);
-      if (next) callback.searchParams.set('next', next);
-      const { error: err } = await supabase.auth.signInWithOtp({
+      const { error: err } = await supabase.auth.signInWithPassword({
         email: email.trim(),
-        options: { emailRedirectTo: callback.toString() },
+        password,
       });
       if (err) throw err;
-      setSent(true);
+      router.push(next ?? '/');
+      router.refresh();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -111,78 +113,104 @@ export function SignInClient({
                 color: t.textSecondary,
               }}
             >
-              Sign in with the email your team or PM invited you with. We&rsquo;ll
-              send you a one-time link.
+              Sign in with the email + password your PM gave you, or the
+              account you created at sign-up.
             </p>
 
-            {sent ? (
-              <SentNotice email={email} t={t} />
-            ) : (
-              <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label
-                    htmlFor="email"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontFamily: editorialFonts.mono,
-                      fontSize: 11,
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                      color: t.textSecondary,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <Mail size={11} /> Email
-                  </label>
-                  <TextInput
-                    id="email"
-                    type="email"
-                    size="lg"
-                    autoFocus
-                    value={email}
-                    onChange={(e) => setEmail(e.currentTarget.value)}
-                    placeholder="you@studio.com"
-                  />
-                </div>
-
-                {error ? (
-                  <p style={{ fontFamily: editorialFonts.body, fontSize: 13, color: t.danger, margin: 0 }}>
-                    {error}
-                  </p>
-                ) : null}
-
-                <PrimaryPill as="button" type="submit" disabled={!valid || pending} fullWidth>
-                  {pending ? <Loader2 size={14} className="animate-spin" /> : null}
-                  Send magic link
-                </PrimaryPill>
-
-                <Rule tone="subtle" />
-
-                <p
+            <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label
+                  htmlFor="email"
                   style={{
-                    margin: 0,
-                    fontFamily: editorialFonts.body,
-                    fontSize: 13,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontFamily: editorialFonts.mono,
+                    fontSize: 11,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
                     color: t.textSecondary,
-                    textAlign: 'center',
+                    marginBottom: 8,
                   }}
                 >
-                  New to the agency?{' '}
-                  <Link
-                    href="/sign-up"
-                    style={{
-                      color: t.textDisplay,
-                      textDecoration: 'none',
-                      borderBottom: `1px solid ${t.borderVisible}`,
-                    }}
-                  >
-                    Create an account
-                  </Link>
+                  <Mail size={11} /> Email
+                </label>
+                <TextInput
+                  id="email"
+                  type="email"
+                  size="lg"
+                  autoFocus={!email}
+                  value={email}
+                  onChange={(e) => setEmail(e.currentTarget.value)}
+                  placeholder="you@studio.com"
+                  autoComplete="email"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="password"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontFamily: editorialFonts.mono,
+                    fontSize: 11,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: t.textSecondary,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Lock size={11} /> Password
+                </label>
+                <TextInput
+                  id="password"
+                  type="password"
+                  size="lg"
+                  autoFocus={!!email}
+                  value={password}
+                  onChange={(e) => setPassword(e.currentTarget.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              {error ? (
+                <p style={{ fontFamily: editorialFonts.body, fontSize: 13, color: t.danger, margin: 0 }}>
+                  {error}
                 </p>
-              </form>
-            )}
+              ) : null}
+
+              <PrimaryPill as="button" type="submit" disabled={!valid || pending} fullWidth>
+                {pending ? <Loader2 size={14} className="animate-spin" /> : null}
+                Sign in
+              </PrimaryPill>
+
+              <Rule tone="subtle" />
+
+              <p
+                style={{
+                  margin: 0,
+                  fontFamily: editorialFonts.body,
+                  fontSize: 13,
+                  color: t.textSecondary,
+                  textAlign: 'center',
+                }}
+              >
+                New to the agency?{' '}
+                <Link
+                  href="/sign-up"
+                  style={{
+                    color: t.textDisplay,
+                    textDecoration: 'none',
+                    borderBottom: `1px solid ${t.borderVisible}`,
+                  }}
+                >
+                  Create an account
+                </Link>
+              </p>
+            </form>
           </div>
         </div>
 
@@ -204,42 +232,3 @@ export function SignInClient({
   );
 }
 
-function SentNotice({ email, t }: { email: string; t: ReturnType<typeof getNd> }): ReactNode {
-  return (
-    <div
-      style={{
-        border: `1px solid ${t.border}`,
-        background: t.surface,
-        borderRadius: 12,
-        padding: 20,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-      }}
-    >
-      <Eyebrow tone="muted">Check your inbox</Eyebrow>
-      <p
-        style={{
-          margin: 0,
-          fontFamily: editorialFonts.body,
-          fontSize: 14,
-          color: t.textPrimary,
-        }}
-      >
-        We sent a magic link to{' '}
-        <span style={{ color: t.textDisplay, fontWeight: 500 }}>{email}</span>. Click it to sign in.
-      </p>
-      <p
-        style={{
-          margin: 0,
-          fontFamily: editorialFonts.body,
-          fontSize: 12,
-          color: t.textSecondary,
-        }}
-      >
-        Dev tip: if it doesn&rsquo;t arrive, you can sign in directly via{' '}
-        <code>/api/dev/sign-in?email={email}</code>.
-      </p>
-    </div>
-  );
-}

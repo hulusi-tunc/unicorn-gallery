@@ -19,7 +19,13 @@ const PLATFORM_LABEL: Record<AppRow['platform'], string> = {
   android: 'Mobile',
 };
 
-export function AppCard({ app }: { app: AppRowWithStaff }): ReactNode {
+export function AppCard({
+  app,
+  unreadCount = 0,
+}: {
+  app: AppRowWithStaff;
+  unreadCount?: number;
+}): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
   const [hover, setHover] = useState(false);
@@ -81,6 +87,41 @@ export function AppCard({ app }: { app: AppRowWithStaff }): ReactNode {
         >
           {PLATFORM_LABEL[app.platform]}
         </span>
+
+        {unreadCount > 0 ? (
+          <span
+            aria-label={`${unreadCount} unread comments`}
+            style={{
+              position: 'absolute',
+              top: 12,
+              left: 12,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontFamily: editorialFonts.body,
+              fontSize: 11,
+              fontWeight: 600,
+              fontVariantNumeric: 'tabular-nums',
+              color: 'white',
+              background: accent,
+              borderRadius: 999,
+              padding: '4px 10px 4px 8px',
+              boxShadow: '0 4px 14px -4px rgba(0,0,0,0.35)',
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: 'white',
+                boxShadow: '0 0 0 2px rgba(255,255,255,0.35)',
+              }}
+            />
+            {unreadCount > 99 ? '99+' : unreadCount} new
+          </span>
+        ) : null}
       </div>
 
       <div

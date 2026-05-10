@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminPage(): Promise<ReactNode> {
   const profile = await getCurrentProfile();
   if (!profile) redirect('/sign-in');
-  if (!profile.is_admin) redirect('/');
+  if (profile.role !== 'agency') redirect('/');
 
   const profiles = await listAllProfiles();
 

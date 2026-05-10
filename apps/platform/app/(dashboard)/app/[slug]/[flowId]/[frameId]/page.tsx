@@ -6,12 +6,16 @@ import { CommentsPanel } from '@/components/comments-panel';
 import { DeviceFrame } from '@/components/device-frame';
 import { Filmstrip } from '@/components/filmstrip';
 import { KeyboardNav } from '@/components/keyboard-nav';
+import { MarkFrameRead } from '@/components/mark-frame-read';
+import { RealtimeRefresh } from '@/components/realtime-refresh';
 import { findOrCreateFrame, listCommentsForFrame } from '@/lib/comments';
 import { imageHref } from '@/lib/image-href';
 import {
   getAppBySlug,
+  getCurrentProfile,
   getLatestBuild,
   getManifestForApp,
+  getMentionableProfilesForApp,
 } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -36,9 +40,11 @@ export default async function FramePage({
   const app = await getAppBySlug(decodeURIComponent(slug));
   if (!app) notFound();
 
-  const [manifest, build] = await Promise.all([
+  const [manifest, build, profile, mentionables] = await Promise.all([
     getManifestForApp(app.id),
     getLatestBuild(app.id),
+    getCurrentProfile(),
+    getMentionableProfilesForApp(app.id),
   ]);
   if (!manifest) notFound();
 
@@ -66,6 +72,8 @@ export default async function FramePage({
 
   return (
     <main className="flex flex-1 overflow-hidden bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
+      <MarkFrameRead frameRowId={frameRow.id} appSlug={app.slug} />
+      <RealtimeRefresh table="comments" filter={`frame_id=eq.${frameRow.id}`} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <KeyboardNav
           prevHref={prev ? frameHref(prev.id) : undefined}
@@ -135,7 +143,14 @@ export default async function FramePage({
         />
       </div>
 
-      <CommentsPanel frameRowId={frameRow.id} comments={comments} />
+      <CommentsPanel
+        frameRowId={frameRow.id}
+        comments={comments}
+        isAgency={profile?.role === 'agency'}
+        appSlug={app.slug}
+        appId={app.id}
+        mentionables={mentionables}
+      />
     </main>
   );
 }

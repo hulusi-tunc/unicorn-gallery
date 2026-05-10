@@ -4,44 +4,14 @@ import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '@/lib/queries';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 
-const HARDCODED_ADMIN = 'hulusitunc1@gmail.com';
+const HARDCODED_FOUNDER = 'hulusitunc1@gmail.com';
 
-async function requireAdmin(): Promise<{ id: string } | { error: string }> {
+async function requireAgency(): Promise<{ id: string } | { error: string }> {
   const profile = await getCurrentProfile();
-  if (!profile || profile.role !== 'agency' || !profile.is_admin) {
-    return { error: 'Admin only.' };
+  if (!profile || profile.role !== 'agency') {
+    return { error: 'Agency members only.' };
   }
   return { id: profile.id };
-}
-
-/** Toggle admin status on another agency user. Cannot demote the founder. */
-export async function setAdmin(input: {
-  profileId: string;
-  isAdmin: boolean;
-}): Promise<{ ok?: true; error?: string }> {
-  const me = await requireAdmin();
-  if ('error' in me) return me;
-
-  const admin = getSupabaseAdminClient();
-
-  // Don't let anyone (even another admin) demote the hardcoded founder.
-  const { data: target } = await admin
-    .from('profiles')
-    .select('email')
-    .eq('id', input.profileId)
-    .maybeSingle();
-  if (target?.email === HARDCODED_ADMIN && !input.isAdmin) {
-    return { error: 'Cannot demote the founder.' };
-  }
-
-  const { error } = await admin
-    .from('profiles')
-    .update({ is_admin: input.isAdmin })
-    .eq('id', input.profileId);
-  if (error) return { error: error.message };
-
-  revalidatePath('/admin');
-  return { ok: true };
 }
 
 /** Change a user's tier between agency and customer. */
@@ -49,7 +19,7 @@ export async function setRole(input: {
   profileId: string;
   role: 'agency' | 'customer';
 }): Promise<{ ok?: true; error?: string }> {
-  const me = await requireAdmin();
+  const me = await requireAgency();
   if ('error' in me) return me;
 
   const admin = getSupabaseAdminClient();
@@ -60,16 +30,13 @@ export async function setRole(input: {
     .select('email')
     .eq('id', input.profileId)
     .maybeSingle();
-  if (target?.email === HARDCODED_ADMIN && input.role !== 'agency') {
+  if (target?.email === HARDCODED_FOUNDER && input.role !== 'agency') {
     return { error: 'Cannot change the founder\'s role.' };
   }
 
-  // If we drop to customer, also strip admin.
-  const patch =
-    input.role === 'agency' ? { role: 'agency' } : { role: 'customer', is_admin: false };
   const { error } = await admin
     .from('profiles')
-    .update(patch)
+    .update({ role: input.role })
     .eq('id', input.profileId);
   if (error) return { error: error.message };
 
@@ -79,7 +46,7 @@ export async function setRole(input: {
 
 /** Hard-delete a user. Cascades to profile via FK on auth.users. */
 export async function kickUser(profileId: string): Promise<{ ok?: true; error?: string }> {
-  const me = await requireAdmin();
+  const me = await requireAgency();
   if ('error' in me) return me;
   if (profileId === me.id) return { error: 'You can\'t kick yourself.' };
 
@@ -91,7 +58,7 @@ export async function kickUser(profileId: string): Promise<{ ok?: true; error?: 
     .select('email')
     .eq('id', profileId)
     .maybeSingle();
-  if (target?.email === HARDCODED_ADMIN) {
+  if (target?.email === HARDCODED_FOUNDER) {
     return { error: 'Cannot remove the founder.' };
   }
 
@@ -108,9 +75,8 @@ export async function addTeammate(input: {
   email: string;
   name?: string;
   flavor?: 'designer' | 'non-designer';
-  isAdmin?: boolean;
 }): Promise<{ ok?: true; error?: string; signInUrl?: string }> {
-  const me = await requireAdmin();
+  const me = await requireAgency();
   if ('error' in me) return me;
 
   const email = input.email.trim().toLowerCase();
@@ -143,14 +109,13 @@ export async function addTeammate(input: {
     userId = created.user!.id;
   }
 
-  // 3. Update profile to set role/flavor/admin/name.
+  // 3. Update profile to set role/flavor/name.
   await admin
     .from('profiles')
     .update({
       role: 'agency',
       name: input.name?.trim() || null,
       flavor: input.flavor === 'non-designer' ? 'non-designer' : 'designer',
-      is_admin: !!input.isAdmin,
     })
     .eq('id', userId);
 

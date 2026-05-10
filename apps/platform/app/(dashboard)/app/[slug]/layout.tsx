@@ -7,7 +7,9 @@ import {
   getCurrentProfile,
   getLatestBuild,
   getManifestForApp,
+  getUnreadByFlowAndFrameForApp,
   listAgencyProfiles,
+  listAppCustomers,
 } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -23,14 +25,18 @@ export default async function AppLayout({
   const app = await getAppBySlug(decodeURIComponent(slug));
   if (!app) notFound();
 
-  const [manifest, profile, agencyProfiles, latestBuild] = await Promise.all([
+  const [manifest, profile, agencyProfiles, latestBuild, customers] = await Promise.all([
     getManifestForApp(app.id),
     getCurrentProfile(),
     listAgencyProfiles(),
     getLatestBuild(app.id),
+    listAppCustomers(app.id),
   ]);
-  // Only admins can change Designer/PM. Other agency users see the chip but no dropdown.
-  const canEdit = profile?.role === 'agency' && profile.is_admin === true;
+  // Any agency member can change Designer / PM. Customers see chips but no dropdown.
+  const canEdit = profile?.role === 'agency';
+  const unread = profile
+    ? await getUnreadByFlowAndFrameForApp(app.id, profile.id)
+    : { byFlow: new Map<string, number>(), byFrame: new Map<string, number>() };
 
   return (
     <div className="flex flex-col" style={{ minHeight: 'calc(100vh - 60px)' }}>
@@ -41,9 +47,12 @@ export default async function AppLayout({
         canEdit={canEdit}
         latestVersion={latestBuild?.version ?? null}
         latestVersionAt={latestBuild?.created_at ?? null}
+        customers={customers}
       />
       <div className="flex flex-1 overflow-hidden" style={{ minHeight: 'calc(100vh - 60px - 56px)' }}>
-        {manifest ? <FlowSidebar manifest={manifest} appSlug={app.slug} /> : null}
+        {manifest ? (
+          <FlowSidebar manifest={manifest} appSlug={app.slug} unreadByFlow={unread.byFlow} />
+        ) : null}
         <div className="flex flex-1 overflow-hidden">{children}</div>
       </div>
     </div>

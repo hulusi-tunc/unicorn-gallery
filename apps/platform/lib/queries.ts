@@ -74,7 +74,7 @@ export async function listAgencyProfiles(): Promise<ProfileLite[]> {
   const supabase = await getSupabaseServerClient();
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, name, flavor, avatar_url, is_admin')
+    .select('id, email, name, flavor, avatar_url')
     .eq('role', 'agency')
     .order('name', { ascending: true });
   if (error) return [];
@@ -93,6 +93,243 @@ export async function getLatestBuild(appId: string): Promise<Build | null> {
     .maybeSingle();
   if (error) return null;
   return data as Build | null;
+}
+
+/**
+ * Per-frame unread comment count for the current user.
+ * Returned as a Map<frame_row_id, unread_count> so the caller can spread
+ * indicator badges across thumbnails / sidebar / app cards.
+ *
+ * "Unread" = a comment created after the user's last_read_at for that frame
+ * (or any comment if the user has never opened the frame), AND not authored
+ * by the user themselves (don't ping someone with their own comment).
+ */
+export async function getUnreadCountsByFrame(userId: string): Promise<Map<string, number>> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase.rpc('get_unread_comment_counts', { p_user_id: userId });
+  if (error || !data) {
+    // Fallback: compute in-app if the RPC doesn't exist yet (cold migration).
+    return computeUnreadCountsClient(userId);
+  }
+  const m = new Map<string, number>();
+  for (const row of data as Array<{ frame_id: string; unread: number }>) {
+    m.set(row.frame_id, Number(row.unread));
+  }
+  return m;
+}
+
+async function computeUnreadCountsClient(userId: string): Promise<Map<string, number>> {
+  const supabase = await getSupabaseServerClient();
+  // Pull all visible comments + the user's frame_reads, then diff client-side.
+  // For small scale this is fine; if this grows, we'll add a SQL RPC.
+  const [{ data: comments }, { data: reads }] = await Promise.all([
+    supabase.from('comments').select('frame_id, author_id, created_at').neq('author_id', userId),
+    supabase.from('frame_reads').select('frame_id, last_read_at').eq('user_id', userId),
+  ]);
+  const lastRead = new Map<string, string>();
+  for (const r of (reads ?? []) as Array<{ frame_id: string; last_read_at: string }>) {
+    lastRead.set(r.frame_id, r.last_read_at);
+  }
+  const m = new Map<string, number>();
+  for (const c of (comments ?? []) as Array<{ frame_id: string; created_at: string }>) {
+    const lr = lastRead.get(c.frame_id);
+    if (!lr || c.created_at > lr) {
+      m.set(c.frame_id, (m.get(c.frame_id) ?? 0) + 1);
+    }
+  }
+  return m;
+}
+
+/**
+ * Per-app unread notification counts for the current user. Used to drop a
+ * "X new" badge on each AppCard.
+ */
+export async function getUnreadCountsByApp(userId: string): Promise<Map<string, number>> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('app_id')
+    .eq('user_id', userId)
+    .is('seen_at', null);
+  if (error || !data) return new Map();
+  const m = new Map<string, number>();
+  for (const row of data as Array<{ app_id: string }>) {
+    m.set(row.app_id, (m.get(row.app_id) ?? 0) + 1);
+  }
+  return m;
+}
+
+/**
+ * Per-flow + per-frame unread counts within a single app, keyed by the
+ * MANIFEST string ids (flow.id and frame.id from the manifest), so the
+ * flow sidebar and frame thumbnails can drop indicators directly.
+ */
+export async function getUnreadByFlowAndFrameForApp(
+  appId: string,
+  userId: string,
+): Promise<{ byFlow: Map<string, number>; byFrame: Map<string, number> }> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('frame:frames!notifications_frame_id_fkey(flow_id, frame_id)')
+    .eq('user_id', userId)
+    .eq('app_id', appId)
+    .is('seen_at', null);
+  const byFlow = new Map<string, number>();
+  const byFrame = new Map<string, number>();
+  if (error || !data) return { byFlow, byFrame };
+  for (const row of data as unknown as Array<{
+    frame: { flow_id: string; frame_id: string } | null;
+  }>) {
+    if (!row.frame) continue;
+    const f = row.frame.flow_id;
+    const k = `${row.frame.flow_id}::${row.frame.frame_id}`;
+    byFlow.set(f, (byFlow.get(f) ?? 0) + 1);
+    byFrame.set(k, (byFrame.get(k) ?? 0) + 1);
+  }
+  return { byFlow, byFrame };
+}
+
+/** Total unread comments across every visible app, for the topbar bell badge. */
+export async function getTotalUnreadCount(userId: string): Promise<number> {
+  const supabase = await getSupabaseServerClient();
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .is('seen_at', null);
+  if (error || count == null) return 0;
+  return count;
+}
+
+export interface NotificationFeedItem {
+  id: string;
+  kind: 'comment' | 'mention' | 'reply';
+  seen_at: string | null;
+  created_at: string;
+  comment: {
+    id: string;
+    body: string;
+    parent_id: string | null;
+  } | null;
+  frame: {
+    id: string;
+    flow_id: string;
+    frame_id: string;
+    flow_name: string;
+    frame_name: string;
+    latest_image_url: string | null;
+  } | null;
+  app: {
+    id: string;
+    slug: string;
+    name: string;
+    accent_color: string | null;
+  } | null;
+  actor: ProfileLite | null;
+}
+
+export async function listNotifications(
+  userId: string,
+  opts: { limit?: number; onlyUnseen?: boolean } = {},
+): Promise<NotificationFeedItem[]> {
+  const supabase = await getSupabaseServerClient();
+  const limit = opts.limit ?? 50;
+  let q = supabase
+    .from('notifications')
+    .select(
+      'id, kind, seen_at, created_at, ' +
+        'comment:comments!notifications_comment_id_fkey(id, body, parent_id), ' +
+        'frame:frames!notifications_frame_id_fkey(id, flow_id, frame_id, flow_name, frame_name, latest_image_url), ' +
+        'app:apps!notifications_app_id_fkey(id, slug, name, accent_color), ' +
+        'actor:profiles!notifications_actor_id_fkey(id, email, name, flavor, avatar_url)',
+    )
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (opts.onlyUnseen) q = q.is('seen_at', null);
+  const { data, error } = await q;
+  if (error) return [];
+  return (data ?? []) as unknown as NotificationFeedItem[];
+}
+
+/**
+ * Profiles that the agency or this app's customers can @mention from a
+ * comment on this app: every agency user + every customer linked to this app.
+ */
+export interface MentionableProfile {
+  id: string;
+  email: string;
+  name: string | null;
+  /** Stable handle used in @-mention text. lowercased email-prefix. */
+  handle: string;
+  role: 'agency' | 'customer';
+  avatar_url: string | null;
+}
+
+export async function getMentionableProfilesForApp(
+  appId: string,
+): Promise<MentionableProfile[]> {
+  const supabase = await getSupabaseServerClient();
+  const [agency, customers] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, email, name, role, avatar_url')
+      .eq('role', 'agency')
+      .order('name', { ascending: true }),
+    supabase
+      .from('app_customers')
+      .select('profile:profiles!inner(id, email, name, role, avatar_url)')
+      .eq('app_id', appId),
+  ]);
+  const out: MentionableProfile[] = [];
+  for (const p of (agency.data ?? []) as Array<{
+    id: string;
+    email: string;
+    name: string | null;
+    role: 'agency' | 'customer';
+    avatar_url: string | null;
+  }>) {
+    out.push({ ...p, handle: handleFromEmail(p.email) });
+  }
+  for (const row of (customers.data ?? []) as unknown as Array<{
+    profile: {
+      id: string;
+      email: string;
+      name: string | null;
+      role: 'agency' | 'customer';
+      avatar_url: string | null;
+    };
+  }>) {
+    const p = row.profile;
+    if (out.find((o) => o.id === p.id)) continue;
+    out.push({ ...p, handle: handleFromEmail(p.email) });
+  }
+  return out;
+}
+
+function handleFromEmail(email: string): string {
+  return (email.split('@')[0] ?? email).toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+}
+
+export interface AppCustomerWithProfile {
+  user_id: string;
+  added_at: string;
+  invited_by: string | null;
+  profile: ProfileLite & { role: 'agency' | 'customer' };
+}
+
+export async function listAppCustomers(appId: string): Promise<AppCustomerWithProfile[]> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('app_customers')
+    .select(
+      'user_id, added_at, invited_by, profile:profiles!inner(id, email, name, flavor, avatar_url, role)',
+    )
+    .eq('app_id', appId)
+    .order('added_at', { ascending: false });
+  if (error) return [];
+  return (data ?? []) as unknown as AppCustomerWithProfile[];
 }
 
 export async function listFramesForApp(appId: string): Promise<Frame[]> {

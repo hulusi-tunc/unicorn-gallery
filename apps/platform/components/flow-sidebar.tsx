@@ -29,9 +29,11 @@ function buildFlowTree(flows: readonly ManifestFlow[]): FlowNode[] {
 export function FlowSidebar({
   manifest,
   appSlug,
+  unreadByFlow,
 }: {
   manifest: Manifest;
   appSlug: string;
+  unreadByFlow?: Map<string, number>;
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
@@ -78,6 +80,7 @@ export function FlowSidebar({
               appSlug={appSlug}
               activeFlowId={activeFlowId}
               t={t}
+              unreadByFlow={unreadByFlow}
             />
           ))
         )}
@@ -92,14 +95,17 @@ function FlowTreeNode({
   appSlug,
   activeFlowId,
   t,
+  unreadByFlow,
 }: {
   node: FlowNode;
   depth: number;
   appSlug: string;
   activeFlowId: string;
   t: ReturnType<typeof getNd>;
+  unreadByFlow?: Map<string, number>;
 }): ReactNode {
   const active = node.flow.id === activeFlowId;
+  const unread = unreadByFlow?.get(node.flow.id) ?? 0;
   return (
     <>
       <FlowLink
@@ -109,6 +115,7 @@ function FlowTreeNode({
         active={active}
         depth={depth}
         t={t}
+        unread={unread}
       />
       {node.children.map((child) => (
         <FlowTreeNode
@@ -118,6 +125,7 @@ function FlowTreeNode({
           appSlug={appSlug}
           activeFlowId={activeFlowId}
           t={t}
+          unreadByFlow={unreadByFlow}
         />
       ))}
     </>
@@ -131,6 +139,7 @@ function FlowLink({
   active,
   depth,
   t,
+  unread,
 }: {
   href: string;
   name: string;
@@ -138,6 +147,7 @@ function FlowLink({
   active: boolean;
   depth: number;
   t: ReturnType<typeof getNd>;
+  unread: number;
 }): ReactNode {
   const indent = depth * 14;
   return (
@@ -202,19 +212,51 @@ function FlowLink({
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          minWidth: 22,
-          height: 18,
-          padding: '0 6px',
-          borderRadius: 999,
-          background: active ? t.surfaceRaised : 'transparent',
-          fontFamily: editorialFonts.mono,
-          fontSize: 10,
-          fontVariantNumeric: 'tabular-nums',
-          color: active ? t.textPrimary : t.textSecondary,
+          gap: 6,
+          flexShrink: 0,
         }}
       >
-        {count}
+        {unread > 0 ? (
+          <span
+            aria-label={`${unread} unread`}
+            title={`${unread} unread comment${unread === 1 ? '' : 's'}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: 18,
+              height: 18,
+              padding: '0 5px',
+              borderRadius: 999,
+              background: t.accent,
+              fontFamily: editorialFonts.mono,
+              fontSize: 10,
+              fontWeight: 600,
+              fontVariantNumeric: 'tabular-nums',
+              color: 'white',
+            }}
+          >
+            {unread > 99 ? '99+' : unread}
+          </span>
+        ) : null}
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minWidth: 22,
+            height: 18,
+            padding: '0 6px',
+            borderRadius: 999,
+            background: active ? t.surfaceRaised : 'transparent',
+            fontFamily: editorialFonts.mono,
+            fontSize: 10,
+            fontVariantNumeric: 'tabular-nums',
+            color: active ? t.textPrimary : t.textSecondary,
+          }}
+        >
+          {count}
+        </span>
       </span>
     </Link>
   );

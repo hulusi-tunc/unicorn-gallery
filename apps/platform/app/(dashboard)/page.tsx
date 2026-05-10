@@ -3,7 +3,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AppCard } from '@/components/app-card';
 import { EmptyState } from '@/components/empty-state';
-import { getCurrentProfile, listVisibleApps } from '@/lib/queries';
+import { getCurrentProfile, getUnreadCountsByApp, listVisibleApps } from '@/lib/queries';
 import type { AppRowWithStaff } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -44,7 +44,10 @@ export default async function HomePage({
   searchParams: Promise<{ staff?: string }>;
 }): Promise<ReactNode> {
   const profile = (await getCurrentProfile())!; // layout already redirected if null
-  const apps = await listVisibleApps();
+  const [apps, unreadByApp] = await Promise.all([
+    listVisibleApps(),
+    getUnreadCountsByApp(profile.id),
+  ]);
   const isAgency = profile.role === 'agency';
 
   const params = await searchParams;
@@ -104,7 +107,11 @@ export default async function HomePage({
       ) : (
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((app) => (
-            <AppCard key={app.id} app={app} />
+            <AppCard
+              key={app.id}
+              app={app}
+              unreadCount={unreadByApp.get(app.id) ?? 0}
+            />
           ))}
         </div>
       )}

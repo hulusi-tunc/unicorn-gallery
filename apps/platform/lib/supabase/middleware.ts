@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
   '/auth/error',
   '/api/dev',
   '/api/sign-up',
+  '/shared',
 ];
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
