@@ -1,9 +1,7 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { CommentsPanel } from '@/components/comments-panel';
-import { DeviceFrame } from '@/components/device-frame';
 import { Filmstrip } from '@/components/filmstrip';
 import { FrameVersionStage } from '@/components/frame-version-scrubber';
 import { KeyboardNav } from '@/components/keyboard-nav';
@@ -99,35 +97,16 @@ export default async function FramePage({
           </span>
         </div>
 
-        <FrameVersionStage captures={captures} initialSrc={imageHref(frame.image)}>
-          {(currentSrc) => (
-            <div className="relative flex flex-1 items-center justify-center overflow-auto bg-[oklch(0.965_0.004_260)] px-10 py-6 dark:bg-[oklch(0.175_0.007_260)]">
-              {prev ? (
-                <Link
-                  href={frameHref(prev.id)}
-                  className={`absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} p-2 ${TEXT_SECONDARY} backdrop-blur transition-colors hover:text-[oklch(0.15_0.008_260)] dark:hover:text-[oklch(0.97_0.005_260)]`}
-                  aria-label={`Previous: ${prev.name}`}
-                  title={prev.name}
-                >
-                  <ChevronLeft size={18} />
-                </Link>
-              ) : null}
-
-              <DeviceFrame platform={manifest.platform} src={currentSrc} alt={frame.name} />
-
-              {next ? (
-                <Link
-                  href={frameHref(next.id)}
-                  className={`absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} p-2 ${TEXT_SECONDARY} backdrop-blur transition-colors hover:text-[oklch(0.15_0.008_260)] dark:hover:text-[oklch(0.97_0.005_260)]`}
-                  aria-label={`Next: ${next.name}`}
-                  title={next.name}
-                >
-                  <ChevronRight size={18} />
-                </Link>
-              ) : null}
-            </div>
-          )}
-        </FrameVersionStage>
+        <FrameVersionStage
+          captures={captures}
+          initialSrc={imageHref(frame.image)}
+          platform={manifest.platform}
+          frameName={frame.name}
+          prevHref={prev ? frameHref(prev.id) : undefined}
+          prevName={prev?.name}
+          nextHref={next ? frameHref(next.id) : undefined}
+          nextName={next?.name}
+        />
 
         <div className={`flex items-center gap-3 border-t ${BORDER_LIGHT} ${BORDER_DARK} px-10 py-3 text-[11px] ${TEXT_SECONDARY}`}>
           <kbd className={`rounded border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} px-1.5 py-0.5 font-mono text-[10px] ${TEXT_PRIMARY}`}>

@@ -1,7 +1,9 @@
 'use client';
 
-import { History } from 'lucide-react';
+import { ChevronLeft, ChevronRight, History } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { DeviceFrame } from '@/components/device-frame';
 import { imageHref } from '@/lib/image-href';
 
 interface CaptureEntry {
@@ -122,19 +124,34 @@ export function FrameVersionScrubber({
 }
 
 /**
- * Stateful wrapper that pairs the scrubber with a state-driven image source.
- * The page passes the initial latest image (idx 0); we own the active idx
- * + the resulting src. Renders the scrubber + a render-prop signal so the
- * parent can swap the bezel image without prop drilling.
+ * Stateful wrapper that owns the active capture idx and renders the whole
+ * bezel viewport (DeviceFrame + prev/next arrows + scrubber). Server pages
+ * can't pass render-prop functions across the RSC boundary, so this
+ * component takes flat props instead and composes the layout itself.
  */
+const BORDER_LIGHT = 'border-[oklch(0.9_0.007_260)]';
+const BORDER_DARK = 'dark:border-[oklch(0.24_0.008_260)]';
+const TEXT_SECONDARY = 'text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]';
+const SURFACE = 'bg-white dark:bg-[oklch(0.175_0.007_260)]';
+
 export function FrameVersionStage({
   captures,
   initialSrc,
-  children,
+  platform,
+  frameName,
+  prevHref,
+  prevName,
+  nextHref,
+  nextName,
 }: {
   captures: CaptureEntry[];
   initialSrc: string;
-  children: (currentSrc: string) => React.ReactNode;
+  platform: 'ios' | 'android' | 'web';
+  frameName: string;
+  prevHref?: string;
+  prevName?: string;
+  nextHref?: string;
+  nextName?: string;
 }): React.ReactNode {
   const [activeIdx, setActiveIdx] = useState(0);
   const active = captures.find((c) => c.idx === activeIdx);
@@ -142,7 +159,29 @@ export function FrameVersionStage({
 
   return (
     <>
-      {children(currentSrc)}
+      <div className="relative flex flex-1 items-center justify-center overflow-auto bg-[oklch(0.965_0.004_260)] px-10 py-6 dark:bg-[oklch(0.175_0.007_260)]">
+        {prevHref ? (
+          <Link
+            href={prevHref}
+            className={`absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} p-2 ${TEXT_SECONDARY} backdrop-blur transition-colors hover:text-[oklch(0.15_0.008_260)] dark:hover:text-[oklch(0.97_0.005_260)]`}
+            aria-label={prevName ? `Previous: ${prevName}` : 'Previous'}
+            title={prevName}
+          >
+            <ChevronLeft size={18} />
+          </Link>
+        ) : null}
+        <DeviceFrame platform={platform} src={currentSrc} alt={frameName} />
+        {nextHref ? (
+          <Link
+            href={nextHref}
+            className={`absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} p-2 ${TEXT_SECONDARY} backdrop-blur transition-colors hover:text-[oklch(0.15_0.008_260)] dark:hover:text-[oklch(0.97_0.005_260)]`}
+            aria-label={nextName ? `Next: ${nextName}` : 'Next'}
+            title={nextName}
+          >
+            <ChevronRight size={18} />
+          </Link>
+        ) : null}
+      </div>
       <FrameVersionScrubber
         captures={captures}
         activeIdx={activeIdx}
