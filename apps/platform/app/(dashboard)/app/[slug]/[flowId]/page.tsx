@@ -7,6 +7,7 @@ import {
   getCurrentProfile,
   getFreshFrameKeys,
   getManifestForApp,
+  getUnresolvedCommentsByFrame,
 } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -27,9 +28,10 @@ export default async function FlowPage({
   const flow = manifest.flows.find((f) => f.id === flowId);
   if (!flow) notFound();
 
-  const freshFrameKeys = profile
-    ? await getFreshFrameKeys(profile.id, app.id)
-    : new Set<string>();
+  const [freshFrameKeys, unresolvedByFrame] = await Promise.all([
+    profile ? getFreshFrameKeys(profile.id, app.id) : Promise.resolve(new Set<string>()),
+    getUnresolvedCommentsByFrame(app.id),
+  ]);
 
   return (
     <main className="flex flex-1 flex-col overflow-y-auto bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
@@ -63,6 +65,7 @@ export default async function FlowPage({
           platform={manifest.platform}
           appSlug={app.slug}
           freshFrameKeys={freshFrameKeys}
+          unresolvedByFrame={unresolvedByFrame}
         />
       )}
     </main>

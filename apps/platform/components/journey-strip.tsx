@@ -8,7 +8,9 @@ import type {
 import type { ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { IPHONE_BEZEL_ASPECT, IPhoneBezel } from '@/components/iphone-bezel';
+import { UnresolvedBadge } from '@/components/unresolved-badge';
 import { imageHref } from '@/lib/image-href';
+import type { FrameUnresolvedSummary } from '@/lib/queries';
 
 const MOBILE_CARD_HEIGHT = 380;
 const WEB_CARD_HEIGHT = 220;
@@ -19,6 +21,7 @@ export function JourneyStrip({
   platform,
   appSlug,
   freshFrameKeys,
+  unresolvedByFrame,
 }: {
   flow: ManifestFlow;
   platform: Platform;
@@ -28,6 +31,13 @@ export function JourneyStrip({
    * user last opened them. Cards in the set get an "Updated" pill.
    */
   freshFrameKeys?: Set<string>;
+  /**
+   * Map of `frame_id` → unresolved comment summary (count + a short
+   * preview of recent threads). Frames with at least one open thread get
+   * an orange badge so PMs can scan a flow and hover for a quick look at
+   * what's open.
+   */
+  unresolvedByFrame?: Map<string, FrameUnresolvedSummary>;
 }): ReactNode {
   return (
     <div className="no-scrollbar overflow-x-auto px-10 pb-10 pt-4">
@@ -40,6 +50,7 @@ export function JourneyStrip({
               platform={platform}
               href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(frame.id)}`}
               isFresh={freshFrameKeys?.has(frame.id) ?? false}
+              unresolved={unresolvedByFrame?.get(frame.id) ?? null}
             />
             {i < flow.frames.length - 1 && (
               <ChevronRight
@@ -61,12 +72,14 @@ function JourneyCard({
   platform,
   href,
   isFresh,
+  unresolved,
 }: {
   frame: ManifestFrame;
   step: number;
   platform: Platform;
   href: string;
   isFresh: boolean;
+  unresolved: FrameUnresolvedSummary | null;
 }): ReactNode {
   const isMobile = platform !== 'web';
 
@@ -86,6 +99,13 @@ function JourneyCard({
           >
             Updated
           </span>
+        ) : null}
+        {unresolved && unresolved.count > 0 ? (
+          <UnresolvedBadge
+            count={unresolved.count}
+            preview={unresolved.preview}
+            offsetForUpdated={isFresh}
+          />
         ) : null}
 
         {isMobile ? (

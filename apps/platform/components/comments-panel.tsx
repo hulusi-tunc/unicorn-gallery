@@ -6,9 +6,11 @@ import {
   CornerDownRight,
   Loader2,
   MessageCircle,
+  Pencil,
   Reply,
   RotateCcw,
   Send,
+  Trash2,
   X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -19,10 +21,16 @@ import {
   useTransition,
   type FormEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import { UserAvatar } from '@/components/user-avatar';
-import { postComment, setCommentResolved } from '@/lib/actions/comments';
+import {
+  deleteComment,
+  postComment,
+  setCommentResolved,
+  updateComment,
+} from '@/lib/actions/comments';
 import { editorialFonts, getNd } from '@/lib/tokens';
 import type { CommentWithAuthor } from '@/lib/comments';
 import type { MentionableProfile } from '@/lib/queries';
@@ -33,6 +41,7 @@ export function CommentsPanel({
   isAgency,
   appSlug,
   appId,
+  currentUserId,
   mentionables,
 }: {
   frameRowId: string;
@@ -40,6 +49,8 @@ export function CommentsPanel({
   isAgency: boolean;
   appSlug: string;
   appId: string;
+  /** Used for ownership checks (edit/delete on own comments). null when not signed in (won't happen on this route, but typing it kindly). */
+  currentUserId: string | null;
   mentionables: MentionableProfile[];
 }): ReactNode {
   const router = useRouter();
@@ -50,6 +61,7 @@ export function CommentsPanel({
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   const threads = useMemo(() => buildThreads(comments), [comments]);
   const visibleThreads = useMemo(
@@ -78,6 +90,8 @@ export function CommentsPanel({
       if (res.error) throw new Error(res.error);
       setBody('');
       router.refresh();
+      // Keep focus on the composer so successive comments don't need a click.
+      requestAnimationFrame(() => composerRef.current?.focus());
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -214,6 +228,7 @@ export function CommentsPanel({
               appSlug={appSlug}
               frameRowId={frameRowId}
               appId={appId}
+              currentUserId={currentUserId}
               mentionables={mentionables}
             />
           ))
@@ -246,14 +261,38 @@ export function CommentsPanel({
             t={t}
             placeholder="Add a comment… (use @ to mention)"
             rows={2}
+            textareaRef={composerRef}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             onSubmitShortcut={(form) => form.requestSubmit()}
           />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             {error ? (
-              <span style={{ marginRight: 'auto', fontSize: 11, color: t.danger }}>{error}</span>
-            ) : null}
+              <span style={{ fontSize: 11, color: t.danger }}>{error}</span>
+            ) : (
+              <span
+                style={{
+                  fontFamily: editorialFonts.mono,
+                  fontSize: 10,
+                  color: t.textDisabled,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                <kbd
+                  style={{
+                    padding: '1px 5px',
+                    borderRadius: 4,
+                    border: `1px solid ${t.border}`,
+                    background: t.black,
+                    fontFamily: 'inherit',
+                    fontSize: 'inherit',
+                  }}
+                >
+                  ⌘↵
+                </kbd>{' '}
+                to post · @ to mention
+              </span>
+            )}
             <button
               type="submit"
               disabled={pending || !body.trim()}
@@ -274,7 +313,7 @@ export function CommentsPanel({
               }}
             >
               {pending ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
-              Post
+              {pending ? 'Posting…' : 'Post'}
             </button>
           </div>
         </div>
@@ -288,23 +327,35 @@ function CommentItem({
   t,
   isAgency,
   appSlug,
+  currentUserId,
+  mentionables,
   onReplyClick,
 }: {
   comment: CommentWithAuthor;
   t: ReturnType<typeof getNd>;
   isAgency: boolean;
   appSlug: string;
+  currentUserId: string | null;
+  mentionables: MentionableProfile[];
   /** When set, shows a Reply button — only on thread roots, not on replies. */
   onReplyClick?: () => void;
 }): ReactNode {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(comment.body);
+  const [editError, setEditError] = useState<string | null>(null);
   const date = new Date(comment.created_at);
   const dateLabel = isNaN(date.getTime())
     ? ''
     : date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   const resolved = comment.resolved_at != null;
+  const isAuthor = currentUserId != null && currentUserId === comment.author_id;
+  // Author can always edit + delete; agency can delete anyone's. RLS
+  // matches this on the server, we just gate the buttons.
+  const canEdit = isAuthor;
+  const canDelete = isAuthor || isAgency;
 
   const onToggleResolve = (): void => {
     startTransition(async () => {
@@ -314,6 +365,42 @@ function CommentItem({
         appSlug,
       });
       router.refresh();
+    });
+  };
+
+  const onSaveEdit = (): void => {
+    const next = draft.trim();
+    if (!next || next === comment.body) {
+      setEditing(false);
+      return;
+    }
+    setEditError(null);
+    startTransition(async () => {
+      const res = await updateComment({ commentId: comment.id, body: next, appSlug });
+      if (res.error) {
+        setEditError(res.error);
+      } else {
+        setEditing(false);
+        router.refresh();
+      }
+    });
+  };
+
+  const onCancelEdit = (): void => {
+    setDraft(comment.body);
+    setEditError(null);
+    setEditing(false);
+  };
+
+  const onDelete = (): void => {
+    if (!confirm('Delete this comment? This cannot be undone.')) return;
+    startTransition(async () => {
+      const res = await deleteComment({ commentId: comment.id, appSlug });
+      if (res.error) {
+        alert(res.error);
+      } else {
+        router.refresh();
+      }
     });
   };
 
@@ -372,90 +459,183 @@ function CommentItem({
             </span>
           ) : null}
         </div>
-        <p
-          style={{
-            margin: '4px 0 0',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            fontSize: 14,
-            color: t.textPrimary,
-            textDecoration: resolved ? 'line-through' : 'none',
-            textDecorationColor: t.textDisabled,
-          }}
-        >
-          {renderCommentBody(comment.body, t.accent)}
-        </p>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginTop: 6,
-            gap: 8,
-          }}
-        >
-          <p style={{ margin: 0, fontSize: 10, color: t.textDisabled }}>{dateLabel}</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {onReplyClick ? (
-            <button
-              type="button"
-              onClick={onReplyClick}
-              title="Reply"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '3px 8px',
-                borderRadius: 999,
-                border: `1px solid ${t.border}`,
-                background: 'transparent',
-                color: t.textPrimary,
-                fontFamily: editorialFonts.body,
-                fontSize: 10,
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              <Reply size={10} /> Reply
-            </button>
-          ) : null}
-          {isAgency ? (
-            <button
-              type="button"
-              onClick={onToggleResolve}
-              disabled={pending}
-              title={resolved ? 'Mark as unresolved' : 'Mark as resolved'}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '3px 8px',
-                borderRadius: 999,
-                border: `1px solid ${t.border}`,
-                background: 'transparent',
-                color: resolved ? t.textSecondary : t.textPrimary,
-                fontFamily: editorialFonts.body,
-                fontSize: 10,
-                fontWeight: 500,
-                cursor: pending ? 'not-allowed' : 'pointer',
-                opacity: pending ? 0.5 : 1,
-              }}
-            >
-              {pending ? (
-                <Loader2 size={10} className="animate-spin" />
-              ) : resolved ? (
-                <RotateCcw size={10} />
-              ) : (
-                <Check size={10} />
-              )}
-              {resolved ? 'Reopen' : 'Resolve'}
-            </button>
-          ) : null}
+        {editing ? (
+          <div
+            style={{
+              marginTop: 4,
+              padding: 6,
+              borderRadius: 8,
+              border: `1px solid ${t.borderVisible}`,
+              background: t.surface,
+            }}
+          >
+            <MentionTextarea
+              value={draft}
+              onChange={setDraft}
+              mentionables={mentionables}
+              t={t}
+              placeholder="Edit comment…"
+              rows={2}
+              autoFocus
+              onSubmitShortcut={() => onSaveEdit()}
+              onEscape={onCancelEdit}
+            />
+            {editError ? (
+              <p style={{ margin: '4px 0 0', fontSize: 11, color: t.danger }}>{editError}</p>
+            ) : null}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
+              <button
+                type="button"
+                onClick={onCancelEdit}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: 'transparent',
+                  color: t.textSecondary,
+                  fontFamily: editorialFonts.body,
+                  fontSize: 11,
+                  cursor: 'pointer',
+                }}
+              >
+                <X size={10} /> Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onSaveEdit}
+                disabled={pending || draft.trim().length === 0}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '3px 10px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: t.accent,
+                  color: 'white',
+                  fontFamily: editorialFonts.body,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  cursor: pending || draft.trim().length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: pending || draft.trim().length === 0 ? 0.5 : 1,
+                }}
+              >
+                {pending ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                Save
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <p
+            style={{
+              margin: '4px 0 0',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontSize: 14,
+              color: t.textPrimary,
+              textDecoration: resolved ? 'line-through' : 'none',
+              textDecorationColor: t.textDisabled,
+            }}
+          >
+            {renderCommentBody(comment.body, t.accent)}
+          </p>
+        )}
+        {!editing ? (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: 6,
+              gap: 8,
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 10, color: t.textDisabled }}>{dateLabel}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {onReplyClick ? (
+                <button
+                  type="button"
+                  onClick={onReplyClick}
+                  title="Reply"
+                  style={chipBtnStyle(t)}
+                >
+                  <Reply size={10} /> Reply
+                </button>
+              ) : null}
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  title="Edit your comment"
+                  style={chipBtnStyle(t)}
+                  disabled={pending}
+                >
+                  <Pencil size={10} /> Edit
+                </button>
+              ) : null}
+              {canDelete ? (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  title="Delete comment"
+                  disabled={pending}
+                  style={{
+                    ...chipBtnStyle(t),
+                    color: t.danger,
+                  }}
+                >
+                  <Trash2 size={10} /> Delete
+                </button>
+              ) : null}
+              {isAgency ? (
+                <button
+                  type="button"
+                  onClick={onToggleResolve}
+                  disabled={pending}
+                  title={resolved ? 'Mark as unresolved' : 'Mark as resolved'}
+                  style={{
+                    ...chipBtnStyle(t),
+                    color: resolved ? t.textSecondary : t.textPrimary,
+                    cursor: pending ? 'not-allowed' : 'pointer',
+                    opacity: pending ? 0.5 : 1,
+                  }}
+                >
+                  {pending ? (
+                    <Loader2 size={10} className="animate-spin" />
+                  ) : resolved ? (
+                    <RotateCcw size={10} />
+                  ) : (
+                    <Check size={10} />
+                  )}
+                  {resolved ? 'Reopen' : 'Resolve'}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
+}
+
+function chipBtnStyle(t: ReturnType<typeof getNd>) {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '3px 8px',
+    borderRadius: 999,
+    border: `1px solid ${t.border}`,
+    background: 'transparent',
+    color: t.textPrimary,
+    fontFamily: editorialFonts.body,
+    fontSize: 10,
+    fontWeight: 500,
+    cursor: 'pointer',
+  };
 }
 
 interface Thread {
@@ -490,6 +670,7 @@ function ThreadView({
   appSlug,
   frameRowId,
   appId,
+  currentUserId,
   mentionables,
 }: {
   thread: Thread;
@@ -498,6 +679,7 @@ function ThreadView({
   appSlug: string;
   frameRowId: string;
   appId: string;
+  currentUserId: string | null;
   mentionables: MentionableProfile[];
 }): ReactNode {
   const [replyOpen, setReplyOpen] = useState(false);
@@ -508,6 +690,8 @@ function ThreadView({
         t={t}
         isAgency={isAgency}
         appSlug={appSlug}
+        currentUserId={currentUserId}
+        mentionables={mentionables}
         onReplyClick={() => setReplyOpen((v) => !v)}
       />
       {thread.replies.length > 0 ? (
@@ -528,6 +712,8 @@ function ThreadView({
               t={t}
               isAgency={isAgency}
               appSlug={appSlug}
+              currentUserId={currentUserId}
+              mentionables={mentionables}
             />
           ))}
         </div>
@@ -704,6 +890,7 @@ function MentionTextarea({
   placeholder,
   rows = 2,
   autoFocus,
+  textareaRef,
   onFocus,
   onBlur,
   onSubmitShortcut,
@@ -716,12 +903,15 @@ function MentionTextarea({
   placeholder?: string;
   rows?: number;
   autoFocus?: boolean;
+  /** Optional external ref so the parent can focus/blur the textarea (e.g. refocus after posting). */
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
   onFocus?: () => void;
   onBlur?: () => void;
   onSubmitShortcut?: (form: HTMLFormElement) => void;
   onEscape?: () => void;
 }): ReactNode {
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const internalRef = useRef<HTMLTextAreaElement>(null);
+  const ref = textareaRef ?? internalRef;
   const [trigger, setTrigger] = useState<{ start: number; query: string } | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
 

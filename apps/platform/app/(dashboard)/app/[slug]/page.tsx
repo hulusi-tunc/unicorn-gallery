@@ -3,8 +3,14 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { ManifestFlow } from '@unicorn-studio/gallery-capture';
 import { EmptyState } from '@/components/empty-state';
+import { HashScroller } from '@/components/hash-scroller';
 import { JourneyStrip } from '@/components/journey-strip';
-import { getAppBySlug, getManifestForApp } from '@/lib/queries';
+import {
+  type FrameUnresolvedSummary,
+  getAppBySlug,
+  getManifestForApp,
+  getUnresolvedCommentsByFrame,
+} from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,9 +70,11 @@ export default async function AppOverviewPage({
 
   const tree = buildFlowTree(manifest.flows);
   const totalFrames = manifest.flows.reduce((n, f) => n + f.frames.length, 0);
+  const unresolvedByFrame = await getUnresolvedCommentsByFrame(app.id);
 
   return (
     <main className="flex flex-1 flex-col overflow-y-auto bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
+      <HashScroller />
       <div className="border-b border-[oklch(0.9_0.007_260)] px-10 py-7 dark:border-[oklch(0.24_0.008_260)]">
         <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
           Overview
@@ -88,6 +96,7 @@ export default async function AppOverviewPage({
             platform={manifest.platform}
             appSlug={app.slug}
             isSub={false}
+            unresolvedByFrame={unresolvedByFrame}
           />
         ))}
       </div>
@@ -100,18 +109,23 @@ function FlowSection({
   platform,
   appSlug,
   isSub,
+  unresolvedByFrame,
 }: {
   node: FlowNode;
   platform: 'ios' | 'android' | 'web';
   appSlug: string;
   isSub: boolean;
+  unresolvedByFrame: Map<string, FrameUnresolvedSummary>;
 }): ReactNode {
   return (
     <section
+      id={`flow-${node.flow.id}`}
+      // scroll-mt offsets the sticky/top chrome so the anchor lands the
+      // section header just below it instead of behind the bar.
       className={
         isSub
-          ? 'ml-10 border-l-2 border-[oklch(0.92_0.01_260)] pl-6 dark:border-[oklch(0.26_0.01_260)]'
-          : undefined
+          ? 'ml-10 scroll-mt-24 border-l-2 border-[oklch(0.92_0.01_260)] pl-6 dark:border-[oklch(0.26_0.01_260)]'
+          : 'scroll-mt-24'
       }
     >
       <div
@@ -139,7 +153,12 @@ function FlowSection({
           {node.flow.frames.length} frame{node.flow.frames.length === 1 ? '' : 's'}
         </span>
       </div>
-      <JourneyStrip flow={node.flow} platform={platform} appSlug={appSlug} />
+      <JourneyStrip
+        flow={node.flow}
+        platform={platform}
+        appSlug={appSlug}
+        unresolvedByFrame={unresolvedByFrame}
+      />
       {node.children.length > 0 && (
         <div className="mt-6 flex flex-col gap-8">
           {node.children.map((child) => (
@@ -149,6 +168,7 @@ function FlowSection({
               platform={platform}
               appSlug={appSlug}
               isSub={true}
+              unresolvedByFrame={unresolvedByFrame}
             />
           ))}
         </div>

@@ -78,6 +78,87 @@ export async function listArchivedApps(): Promise<AppRowWithStaff[]> {
   return (data ?? []) as unknown as AppRowWithStaff[];
 }
 
+export interface FrameUnresolvedSummary {
+  count: number;
+  /** Most recent unresolved comments, newest-first. Capped at 3 for hover. */
+  preview: Array<{
+    authorName: string | null;
+    authorEmail: string;
+    authorRole: 'agency' | 'customer';
+    authorAvatarUrl: string | null;
+    body: string;
+    createdAt: string;
+  }>;
+}
+
+/**
+ * Returns a Map from manifest `frame_id` string → unresolved comment
+ * summary (count + a short preview of the latest comments). Frames with
+ * zero unresolved comments are absent from the map. Used by the per-flow
+ * strip to surface an orange badge on cards with open feedback so PMs
+ * can scan a flow at a glance AND hover for a quick look at what's open
+ * without clicking through to the frame.
+ */
+export async function getUnresolvedCommentsByFrame(
+  appId: string,
+): Promise<Map<string, FrameUnresolvedSummary>> {
+  const supabase = await getSupabaseServerClient();
+  const { data: frames, error: framesErr } = await supabase
+    .from('frames')
+    .select('id, frame_id')
+    .eq('app_id', appId);
+  if (framesErr || !frames || frames.length === 0) return new Map();
+  const idToKey = new Map<string, string>();
+  for (const f of frames as Array<{ id: string; frame_id: string }>) {
+    idToKey.set(f.id, f.frame_id);
+  }
+  const { data: comments, error: commentsErr } = await supabase
+    .from('comments')
+    .select(
+      'frame_id, body, created_at, author:profiles!comments_author_id_fkey(name, email, role, avatar_url)',
+    )
+    .in('frame_id', Array.from(idToKey.keys()))
+    .is('resolved_at', null)
+    .order('created_at', { ascending: false });
+  if (commentsErr) return new Map();
+  const result = new Map<string, FrameUnresolvedSummary>();
+  type AuthorRow = {
+    name: string | null;
+    email: string;
+    role: 'agency' | 'customer';
+    avatar_url: string | null;
+  };
+  type RawComment = {
+    frame_id: string;
+    body: string;
+    created_at: string;
+    // Supabase types nested selects as arrays even for single FK joins.
+    author: AuthorRow | AuthorRow[] | null;
+  };
+  for (const c of (comments ?? []) as unknown as RawComment[]) {
+    const key = idToKey.get(c.frame_id);
+    if (!key) continue;
+    let entry = result.get(key);
+    if (!entry) {
+      entry = { count: 0, preview: [] };
+      result.set(key, entry);
+    }
+    entry.count += 1;
+    if (entry.preview.length < 3) {
+      const a = Array.isArray(c.author) ? c.author[0] : c.author;
+      entry.preview.push({
+        authorName: a?.name ?? null,
+        authorEmail: a?.email ?? '',
+        authorRole: a?.role ?? 'customer',
+        authorAvatarUrl: a?.avatar_url ?? null,
+        body: c.body,
+        createdAt: c.created_at,
+      });
+    }
+  }
+  return result;
+}
+
 /**
  * Frames in this app whose latest push (frames.latest_build_id → builds
  * .created_at) happened AFTER the user's last frame_reads.last_read_at.

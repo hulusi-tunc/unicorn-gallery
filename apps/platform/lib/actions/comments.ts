@@ -68,6 +68,59 @@ export async function postComment(input: {
   return { ok: true, commentId: inserted.id };
 }
 
+/**
+ * Edit an existing comment. Only the author can edit their own comment
+ * (RLS enforces this anyway, but we check up front for a friendlier error).
+ * Body changes don't re-fan-out @mention notifications — we treat edits as
+ * typo fixes rather than re-pings.
+ */
+export async function updateComment(input: {
+  commentId: string;
+  body: string;
+  appSlug: string;
+}): Promise<{ ok?: true; error?: string }> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: 'Not signed in.' };
+
+  const body = input.body.trim();
+  if (!body) return { error: 'Comment cannot be empty.' };
+  if (body.length > 9999) return { error: 'Comment is too long (max 10k chars).' };
+
+  const supabase = await getSupabaseServerClient();
+  const { error } = await supabase
+    .from('comments')
+    .update({ body })
+    .eq('id', input.commentId)
+    .eq('author_id', profile.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/app/${input.appSlug}`);
+  return { ok: true };
+}
+
+/**
+ * Delete a comment. Author can always delete their own; agency can delete
+ * anyone's. RLS allows both via the `comments_author_delete` policy.
+ * Cascades to child replies via the comments.parent_id FK on delete cascade.
+ */
+export async function deleteComment(input: {
+  commentId: string;
+  appSlug: string;
+}): Promise<{ ok?: true; error?: string }> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: 'Not signed in.' };
+
+  const supabase = await getSupabaseServerClient();
+  const { error } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', input.commentId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/app/${input.appSlug}`);
+  return { ok: true };
+}
+
 /** Extract unique lowercase handles from a comment body's @mentions. */
 function parseMentionHandles(body: string): string[] {
   const re = /@([a-z0-9_.-]+)/gi;

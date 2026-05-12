@@ -3,9 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Manifest, ManifestFlow } from '@unicorn-studio/gallery-capture';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import { editorialFonts, getNd } from '@/lib/tokens';
+
+const SIDEBAR_WIDTH_KEY = 'flow-sidebar-width';
+const DEFAULT_SIDEBAR_WIDTH = 240;
+const MIN_SIDEBAR_WIDTH = 180;
+const MAX_SIDEBAR_WIDTH = 480;
 
 interface FlowNode {
   flow: ManifestFlow;
@@ -40,17 +45,74 @@ export function FlowSidebar({
   const pathname = usePathname();
   const segs = pathname.split('/').filter(Boolean);
   const activeFlowId = segs.length >= 3 ? decodeURIComponent(segs[2] ?? '') : '';
+  // "on overview" = exactly /app/<slug> — we use this to decide whether
+  // a sidebar click should smooth-scroll in place vs route back to the
+  // overview with a hash that the page then scrolls to on mount.
+  const onOverview = segs.length === 2 && segs[0] === 'app';
+
+  // Resizable width, persisted in localStorage so it survives nav. SSR
+  // gets the default to avoid hydration drift; the stored value applies
+  // on the first effect tick.
+  const [width, setWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [resizing, setResizing] = useState(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(DEFAULT_SIDEBAR_WIDTH);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+      if (stored) {
+        const n = Number(stored);
+        if (Number.isFinite(n) && n >= MIN_SIDEBAR_WIDTH && n <= MAX_SIDEBAR_WIDTH) {
+          setWidth(n);
+        }
+      }
+    } catch {
+      /* localStorage unavailable — keep default */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: PointerEvent): void => {
+      const delta = e.clientX - startXRef.current;
+      const next = Math.min(
+        MAX_SIDEBAR_WIDTH,
+        Math.max(MIN_SIDEBAR_WIDTH, startWidthRef.current + delta),
+      );
+      setWidth(next);
+    };
+    const onUp = (): void => {
+      setResizing(false);
+      try {
+        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+      } catch {
+        /* persistence best-effort */
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [resizing, width]);
 
   return (
     <aside
       style={{
-        width: 240,
+        width,
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
         borderRight: `1px solid ${t.border}`,
         background: t.black,
         fontFamily: editorialFonts.body,
+        // Scroll internally so a tall flow tree doesn't push the layout
+        // and the rail stays put while main content scrolls.
+        overflowY: 'auto',
+        position: 'relative',
+        userSelect: resizing ? 'none' : undefined,
       }}
     >
       <div
@@ -79,12 +141,44 @@ export function FlowSidebar({
               depth={0}
               appSlug={appSlug}
               activeFlowId={activeFlowId}
+              onOverview={onOverview}
               t={t}
               unreadByFlow={unreadByFlow}
             />
           ))
         )}
       </nav>
+      {/* Resize handle — a thin vertical strip on the right border.
+          Hovering shows a subtle accent line; dragging adjusts width
+          live. Width persists to localStorage on pointerup. */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          startXRef.current = e.clientX;
+          startWidthRef.current = width;
+          setResizing(true);
+        }}
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: -3,
+          width: 6,
+          height: '100%',
+          cursor: 'col-resize',
+          background: resizing ? t.accent : 'transparent',
+          transition: resizing ? undefined : 'background 120ms ease-out',
+          zIndex: 1,
+        }}
+        onMouseEnter={(e) => {
+          if (!resizing) e.currentTarget.style.background = t.border;
+        }}
+        onMouseLeave={(e) => {
+          if (!resizing) e.currentTarget.style.background = 'transparent';
+        }}
+      />
     </aside>
   );
 }
@@ -94,6 +188,7 @@ function FlowTreeNode({
   depth,
   appSlug,
   activeFlowId,
+  onOverview,
   t,
   unreadByFlow,
 }: {
@@ -101,6 +196,7 @@ function FlowTreeNode({
   depth: number;
   appSlug: string;
   activeFlowId: string;
+  onOverview: boolean;
   t: ReturnType<typeof getNd>;
   unreadByFlow?: Map<string, number>;
 }): ReactNode {
@@ -109,11 +205,13 @@ function FlowTreeNode({
   return (
     <>
       <FlowLink
-        href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(node.flow.id)}`}
+        href={`/app/${encodeURIComponent(appSlug)}#flow-${encodeURIComponent(node.flow.id)}`}
+        flowId={node.flow.id}
         name={node.flow.name}
         count={node.flow.frames.length}
         active={active}
         depth={depth}
+        onOverview={onOverview}
         t={t}
         unread={unread}
       />
@@ -124,6 +222,7 @@ function FlowTreeNode({
           depth={depth + 1}
           appSlug={appSlug}
           activeFlowId={activeFlowId}
+          onOverview={onOverview}
           t={t}
           unreadByFlow={unreadByFlow}
         />
@@ -134,18 +233,22 @@ function FlowTreeNode({
 
 function FlowLink({
   href,
+  flowId,
   name,
   count,
   active,
   depth,
+  onOverview,
   t,
   unread,
 }: {
   href: string;
+  flowId: string;
   name: string;
   count: number;
   active: boolean;
   depth: number;
+  onOverview: boolean;
   t: ReturnType<typeof getNd>;
   unread: number;
 }): ReactNode {
@@ -153,6 +256,19 @@ function FlowLink({
   return (
     <Link
       href={href}
+      onClick={(e) => {
+        // Already on the overview — don't push a new route, just smooth-
+        // scroll the anchor into view. The default Link behavior would
+        // re-render and lose the smooth-scroll feel.
+        if (!onOverview) return;
+        e.preventDefault();
+        const target = document.getElementById(`flow-${flowId}`);
+        if (!target) return;
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Update the hash without scrolling/reloading so back-button still
+        // works and the URL reflects the section.
+        history.replaceState(null, '', `#flow-${flowId}`);
+      }}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -218,8 +334,8 @@ function FlowLink({
       >
         {unread > 0 ? (
           <span
-            aria-label={`${unread} unread`}
-            title={`${unread} unread comment${unread === 1 ? '' : 's'}`}
+            aria-label={`${unread} unresolved`}
+            title={`${unread} unresolved comment${unread === 1 ? '' : 's'} in this flow`}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -228,7 +344,10 @@ function FlowLink({
               height: 18,
               padding: '0 5px',
               borderRadius: 999,
-              background: t.accent,
+              // Orange — matches the unresolved-comment badge on frame
+              // cards so "comments need attention" reads as one signal
+              // across the UI.
+              background: 'oklch(0.7 0.18 55)',
               fontFamily: editorialFonts.mono,
               fontSize: 10,
               fontWeight: 600,

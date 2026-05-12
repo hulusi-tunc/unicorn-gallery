@@ -133,6 +133,7 @@ export default async function FramePage({
         isAgency={profile?.role === 'agency'}
         appSlug={app.slug}
         appId={app.id}
+        currentUserId={profile?.id ?? null}
         mentionables={mentionables}
       />
     </main>
