@@ -5,6 +5,45 @@ import { getSupabaseAdminClient } from '@/lib/supabase/server';
 export const runtime = 'nodejs';
 
 /**
+ * List every project on the platform. Used by Capture's "Cleanup
+ * unsynced" flow to diff the gallery against a local registry and
+ * archive the leftovers in bulk. Same setup-token auth as POST so the
+ * scope stays "the agency's desktops can manage their own projects."
+ *
+ * Optional `?platform=web` filter — agencies running both mobile +
+ * web installs typically want to clean up one surface at a time.
+ */
+export async function GET(request: NextRequest): Promise<Response> {
+  const setupToken = process.env.SETUP_TOKEN;
+  if (!setupToken) {
+    return NextResponse.json(
+      { error: 'Server is missing SETUP_TOKEN env var.' },
+      { status: 500 },
+    );
+  }
+  const auth = request.headers.get('authorization') ?? '';
+  const provided = auth.startsWith('Bearer ')
+    ? auth.slice(7).trim()
+    : auth.trim();
+  if (!provided || provided !== setupToken) {
+    return NextResponse.json({ error: 'Invalid setup token.' }, { status: 401 });
+  }
+  const url = new URL(request.url);
+  const platformFilter = url.searchParams.get('platform');
+  const admin = getSupabaseAdminClient();
+  let query = admin
+    .from('apps')
+    .select('id, slug, name, platform, archived_at, created_at')
+    .order('created_at', { ascending: false });
+  if (platformFilter) query = query.eq('platform', platformFilter);
+  const { data, error } = await query;
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ projects: data ?? [] });
+}
+
+/**
  * Create a new app row + project token. Called by `npx @unicorn-studio/snap-bridge init`
  * when the designer doesn't already have a token to paste.
  *

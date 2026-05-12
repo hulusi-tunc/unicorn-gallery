@@ -69,17 +69,21 @@ export async function ingestCapture({
 }): Promise<IntakeResult | IntakeError> {
   const admin = getSupabaseAdminClient();
 
+  // We DON'T delete frames upfront in replace mode anymore — that
+  // cascades through `frames → comments` and silently wipes every PM
+  // review thread on the project. Instead we let the upsert below
+  // refresh whatever exists, then trim orphans (frames not in the
+  // incoming manifest) AFTER. Comments stay attached to the frame.id
+  // they were originally posted on; missing frames cascade-delete
+  // their orphan comments only, not the active ones.
+  //
+  // Builds are still wiped in replace mode — they're append-only
+  // history rows, not user-authored content. Builds delete via FK
+  // cascade hits frames.latest_build_id which is set during the
+  // upsert below, so the order is: clear builds → upsert frames →
+  // delete orphan frames. Empty-state blink during the swap is
+  // minimal (one async tick).
   if (replace) {
-    // Wipe everything for this app — frames cascade to comments. We keep
-    // builds.is_visible=true on the new build that follows so the app
-    // doesn't blink to "empty" mid-push for any concurrent reader.
-    const { error: delFramesErr } = await admin
-      .from('frames')
-      .delete()
-      .eq('app_id', appId);
-    if (delFramesErr) {
-      return { status: 500, message: `Replace failed (frames): ${delFramesErr.message}` };
-    }
     const { error: delBuildsErr } = await admin
       .from('builds')
       .delete()
@@ -266,6 +270,7 @@ export async function ingestCapture({
   // The flow's index in `newFlows` is the display order; same for frames.
   // If the manifest carries explicit positions we use those, otherwise we
   // fall back to the array index so older clients still get sane ordering.
+  const upsertedFrameIds: string[] = [];
   for (let fi = 0; fi < newFlows.length; fi++) {
     const flow = newFlows[fi];
     if (!flow) continue;
@@ -298,6 +303,7 @@ export async function ingestCapture({
           status: 500,
           message: `Frame upsert failed: ${frErr?.message ?? 'no row returned'}`,
         };
+      upsertedFrameIds.push(frRow.id);
 
       // Rebuild capture history for this frame.
       const { error: delErr } = await admin
@@ -348,6 +354,29 @@ export async function ingestCapture({
           message: `frame_captures insert failed: ${capInsErr.message}`,
         };
       }
+    }
+  }
+
+  // 5. Orphan cleanup (replace-mode only). Frames that exist in the DB
+  // for this app but weren't in the incoming manifest get deleted now.
+  // Comments on those orphan frames cascade-delete with them — but the
+  // designer only loses comments on frames they explicitly removed from
+  // their desktop, which is the right behavior. Comments on
+  // upsert-matched frames stay intact.
+  if (replace) {
+    const { error: orphanErr } =
+      upsertedFrameIds.length > 0
+        ? await admin
+            .from('frames')
+            .delete()
+            .eq('app_id', appId)
+            .not('id', 'in', `(${upsertedFrameIds.map((id) => `"${id}"`).join(',')})`)
+        : await admin.from('frames').delete().eq('app_id', appId);
+    if (orphanErr) {
+      return {
+        status: 500,
+        message: `Orphan frame cleanup failed: ${orphanErr.message}`,
+      };
     }
   }
 
