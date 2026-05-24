@@ -144,5 +144,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     app: { id: result.appId, slug: result.appSlug },
     build: { id: result.buildId, sha: result.buildSha },
     framesCount: result.framesCount,
+    // Per-frame public URLs — Capture stores these as `remoteImageUrl`
+    // on each snap so it can safely evict local PNGs after the cache
+    // grace period without losing thumbnails.
+    frames: result.frames,
   });
 }

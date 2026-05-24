@@ -10,6 +10,14 @@ export interface IntakeResult {
   buildId: string;
   buildSha: string;
   framesCount: number;
+  /**
+   * Per-frame public URLs for every frame that was successfully stored.
+   * Surfaced so the Capture desktop client can store `remoteImageUrl`
+   * locally and safely evict its local PNG cache after a successful push.
+   * Keyed by the manifest-side `frame.id` so the client can match without
+   * recomputing storage paths.
+   */
+  frames: Array<{ frameId: string; url: string }>;
 }
 
 export interface IntakeError {
@@ -98,6 +106,9 @@ export async function ingestCapture({
   // storage path so reviewers can scrub through capture history.
   const newFlows: ManifestSnapshot['flows'] = [];
   let uploaded = 0;
+  // Collected per-frame URLs returned to the caller so Capture can populate
+  // `remoteImageUrl` on each snap and safely evict its local PNG cache.
+  const frameUrls: Array<{ frameId: string; url: string }> = [];
   for (const flow of manifest.flows) {
     const newFrames: typeof flow.frames = [];
     for (const frame of flow.frames) {
@@ -114,6 +125,7 @@ export async function ingestCapture({
         .upload(storagePath, bytes, { contentType: 'image/png', upsert: true });
       if (upErr) return { status: 500, message: `Storage upload failed: ${upErr.message}` };
       const { data: pub } = admin.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(storagePath);
+      frameUrls.push({ frameId: frame.id, url: pub.publicUrl });
       // Upload past versions (newest-first in the array; idx=1+ since
       // idx=0 is the latest above). Missing PNGs in the multipart body
       // are skipped silently — better to lose history than reject the
@@ -386,5 +398,6 @@ export async function ingestCapture({
     buildId,
     buildSha: manifest.buildSha,
     framesCount: uploaded,
+    frames: frameUrls,
   };
 }
