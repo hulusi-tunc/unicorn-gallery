@@ -129,6 +129,45 @@ export async function inviteCustomer(
   };
 }
 
+/**
+ * Adds an already-known customer (one who exists in `profiles` with role
+ * 'customer') to a new app. Does NOT touch auth — no user creation, no
+ * password reset, no credentials returned. Used by the Share dialog's
+ * "Existing customers" picker so the same person can access multiple
+ * apps under a single login.
+ */
+export async function addExistingCustomer(input: {
+  appId: string;
+  appSlug: string;
+  userId: string;
+}): Promise<{ ok?: true; error?: string }> {
+  const me = await requireAgency();
+  if ('error' in me) return me;
+
+  const admin = getSupabaseAdminClient();
+  const { data: profile, error: profErr } = await admin
+    .from('profiles')
+    .select('role')
+    .eq('id', input.userId)
+    .maybeSingle();
+  if (profErr) return { error: profErr.message };
+  if (!profile) return { error: 'Customer not found.' };
+  if (profile.role !== 'customer') {
+    return { error: 'Selected profile is not a customer.' };
+  }
+
+  const { error: linkErr } = await admin
+    .from('app_customers')
+    .upsert(
+      { app_id: input.appId, user_id: input.userId, invited_by: me.id },
+      { onConflict: 'app_id,user_id', ignoreDuplicates: true },
+    );
+  if (linkErr) return { error: linkErr.message };
+
+  revalidatePath(`/app/${input.appSlug}`);
+  return { ok: true };
+}
+
 export async function removeCustomer(input: {
   appId: string;
   appSlug: string;

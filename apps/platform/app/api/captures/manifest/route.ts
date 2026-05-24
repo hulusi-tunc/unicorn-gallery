@@ -52,7 +52,32 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const admin = getSupabaseAdminClient();
 
-  const { data: frameRows, error: framesErr } = await admin
+  // Scope the pull to the latest version. After the version-history rewrite
+  // we no longer delete orphan frames on replace pushes — old versions stay
+  // in `frames` so the gallery's version switcher can render them — so a
+  // raw `select * where app_id` would return the union of every push ever
+  // made and pollute the Capture-side sidebar with ghost flows. Use the
+  // latest build's `frame_versions` as the source of truth for "current".
+  const { data: latestBuild } = await admin
+    .from('builds')
+    .select('id')
+    .eq('app_id', app.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const currentKeys = new Set<string>();
+  if (latestBuild) {
+    const { data: fvRows } = await admin
+      .from('frame_versions')
+      .select('flow_id, frame_id')
+      .eq('build_id', latestBuild.id);
+    for (const r of (fvRows ?? []) as Array<{ flow_id: string; frame_id: string }>) {
+      currentKeys.add(`${r.flow_id}::${r.frame_id}`);
+    }
+  }
+
+  const { data: frameRowsAll, error: framesErr } = await admin
     .from('frames')
     .select(
       'flow_id, frame_id, flow_name, frame_name, parent_flow_id, flow_position, frame_position, latest_image_url, created_at',
@@ -66,6 +91,18 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (framesErr) {
     return NextResponse.json({ error: framesErr.message }, { status: 500 });
   }
+
+  // Filter to the current version. If `frame_versions` is empty (pre-migration
+  // legacy data) fall back to returning every frame so the endpoint doesn't
+  // start handing Capture an empty manifest.
+  const frameRows =
+    currentKeys.size > 0
+      ? (frameRowsAll ?? []).filter((row) =>
+          currentKeys.has(
+            `${(row as { flow_id: string }).flow_id}::${(row as { frame_id: string }).frame_id}`,
+          ),
+        )
+      : frameRowsAll;
 
   // Collapse rows into the flow tree + frame list. The gallery doesn't
   // store autoRoute on frames (it's a capture-side bridge concept), so

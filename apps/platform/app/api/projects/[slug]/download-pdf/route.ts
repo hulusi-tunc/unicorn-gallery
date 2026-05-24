@@ -1,0 +1,730 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { NextResponse, type NextRequest } from 'next/server';
+import {
+  PDFDocument,
+  StandardFonts,
+  appendBezierCurve,
+  clip,
+  endPath,
+  lineTo,
+  moveTo,
+  popGraphicsState,
+  pushGraphicsState,
+  rgb,
+  type PDFFont,
+  type PDFImage,
+  type PDFPage,
+} from 'pdf-lib';
+import type { Platform } from '@/lib/db';
+import {
+  getAppBySlug,
+  getBuildByVersion,
+  getCurrentProfile,
+  getManifestForApp,
+} from '@/lib/queries';
+
+export const runtime = 'nodejs';
+
+/**
+ * Download every screen in a project as a single PDF.
+ *
+ * Auth: agency-only (PMs + designers). Customers are blocked at the API
+ * layer too, not just the header button.
+ *
+ * Versioning: `?v=N` exports that build's snapshot; no param exports the
+ * latest visible build. Matches the same URL contract as the gallery
+ * pages themselves so "download what I'm looking at" works.
+ *
+ * Layout: each flow gets its own section starting on a fresh page; ios/
+ * android screens render inside the same iPhone bezel the gallery uses
+ * (public/iphone-17.png); web screens get a plain bordered card.
+ */
+export async function GET(
+  request: NextRequest,
+  ctx: { params: Promise<{ slug: string }> },
+): Promise<Response> {
+  const { slug } = await ctx.params;
+
+  const profile = await getCurrentProfile();
+  if (!profile) {
+    return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  }
+  if (profile.role !== 'agency') {
+    return NextResponse.json(
+      { error: 'Only PMs and designers can download project PDFs.' },
+      { status: 403 },
+    );
+  }
+
+  const app = await getAppBySlug(decodeURIComponent(slug));
+  if (!app) {
+    return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+  }
+
+  const vParam = request.nextUrl.searchParams.get('v');
+  const versionNumber = vParam ? Number(vParam) : null;
+  if (vParam && (!Number.isFinite(versionNumber) || versionNumber! < 1)) {
+    return NextResponse.json({ error: 'Invalid version.' }, { status: 400 });
+  }
+
+  let buildId: string | undefined;
+  let resolvedVersion: number | null = null;
+  if (versionNumber != null) {
+    const build = await getBuildByVersion(app.id, versionNumber);
+    if (!build) {
+      return NextResponse.json({ error: `Version v${versionNumber} not found.` }, { status: 404 });
+    }
+    buildId = build.id;
+    resolvedVersion = build.version;
+  }
+
+  const manifest = await getManifestForApp(app.id, buildId);
+
+  // Group frames by flow, preserving the manifest's flow + frame ordering.
+  // Empty flows are dropped so we never spend a page on a "Flow X · 0 screens"
+  // header with nothing under it.
+  const flowGroups: FlowGroup[] = manifest
+    ? manifest.flows
+        .map((flow) => ({
+          name: flow.name,
+          frames: flow.frames.map((frame) => ({
+            name: frame.name,
+            imageUrl: frame.image,
+          })),
+        }))
+        .filter((g) => g.frames.length > 0)
+    : [];
+
+  // Single flat fetch keeps concurrency bounded across the whole job, rather
+  // than re-doing it per flow.
+  const allUrls = flowGroups.flatMap((g) => g.frames.map((f) => f.imageUrl));
+  const allImages = await fetchImagesBounded(allUrls, 8);
+
+  const pdf = await PDFDocument.create();
+  pdf.setTitle(`${app.name} — Screens`);
+  pdf.setCreator('Unicorn Studio Gallery');
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+
+  const platform = app.platform;
+  const bezel = platform === 'web' ? null : await loadBezelImage(pdf);
+
+  const versionLabel = resolvedVersion != null ? `v${resolvedVersion}` : 'Latest';
+
+  if (flowGroups.length === 0) {
+    drawEmptyState(pdf, font, boldFont, app.name, versionLabel);
+  } else {
+    await drawFlows(pdf, font, boldFont, app.name, versionLabel, platform, bezel, flowGroups, allImages);
+  }
+
+  const bytes = await pdf.save();
+  const buffer = Buffer.from(bytes);
+
+  const filename = `${app.slug}-${resolvedVersion != null ? `v${resolvedVersion}` : 'latest'}.pdf`;
+
+  return new Response(buffer, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': String(buffer.length),
+      'Cache-Control': 'private, no-store',
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Image fetching
+// ─────────────────────────────────────────────────────────────────────────────
+
+type FetchedImage =
+  | { kind: 'png'; bytes: Uint8Array }
+  | { kind: 'jpg'; bytes: Uint8Array }
+  | { kind: 'unsupported'; reason: string }
+  | { kind: 'missing' };
+
+async function fetchImagesBounded(urls: string[], limit: number): Promise<FetchedImage[]> {
+  const out = new Array<FetchedImage>(urls.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, urls.length) }, async () => {
+    while (true) {
+      const i = cursor++;
+      if (i >= urls.length) return;
+      out[i] = await fetchImage(urls[i]!);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+async function fetchImage(url: string): Promise<FetchedImage> {
+  if (!url) return { kind: 'missing' };
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { kind: 'unsupported', reason: `HTTP ${res.status}` };
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const format = detectImageFormat(buf);
+    if (format === 'png' || format === 'jpg') return { kind: format, bytes: buf };
+    return { kind: 'unsupported', reason: format };
+  } catch (err) {
+    return { kind: 'unsupported', reason: (err as Error).message };
+  }
+}
+
+function detectImageFormat(b: Uint8Array): 'png' | 'jpg' | 'unknown' {
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'png';
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
+  return 'unknown';
+}
+
+async function loadBezelImage(pdf: PDFDocument): Promise<PDFImage | null> {
+  try {
+    const bytes = await readFile(path.join(process.cwd(), 'public', 'iphone-17.png'));
+    return await pdf.embedPng(bytes);
+  } catch {
+    // Bezel asset missing or unreadable — fall back to borderless rendering
+    // rather than failing the whole download.
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PDF layout
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PAGE_W = 595.28; // A4 portrait
+const PAGE_H = 841.89;
+const MARGIN = 36;
+const HEADER_H = 22;
+const HEADER_GAP = 14;
+const FLOW_BAND_H = 30;
+const FLOW_BAND_GAP = 14;
+const CELL_GUTTER = 18;
+const CAPTION_H = 18;
+const CAPTION_GAP = 6;
+const TEXT_DARK = rgb(0.08, 0.08, 0.09);
+const TEXT_MUTED = rgb(0.42, 0.42, 0.45);
+const SURFACE = rgb(0.96, 0.96, 0.97);
+const BORDER = rgb(0.86, 0.86, 0.88);
+const SCREEN_BG = rgb(0, 0, 0);
+
+// iPhone bezel geometry, mirroring components/iphone-bezel.tsx so the PDF
+// matches the gallery's on-screen rendering pixel-for-pixel proportionally.
+const BEZEL_ASPECT = 450 / 920;
+const SCREEN_INSET_X_PCT = 0.0533;
+const SCREEN_INSET_Y_PCT = 0.025;
+const SCREEN_W_PCT = 0.8933;
+const SCREEN_H_PCT = 0.95;
+const SCREEN_RADIUS_PCT = 0.065; // = 13% / 2
+
+interface FrameEntry {
+  name: string;
+  imageUrl: string;
+}
+
+interface FlowGroup {
+  name: string;
+  frames: FrameEntry[];
+}
+
+interface GridSpec {
+  cols: number;
+  rows: number;
+  cellW: number;
+  cellH: number;
+  gridTop: number;
+  perPage: number;
+}
+
+function computeGrid(platform: Platform): GridSpec {
+  // Mobile bezels are very tall (aspect 0.49) — a 3x2 grid leaves room for
+  // each bezel to render at a usable size. Web screens are landscape-ish
+  // and look better in a wider 2x3 grid.
+  const cols = platform === 'web' ? 2 : 3;
+  const rows = platform === 'web' ? 3 : 2;
+  const cellW = (PAGE_W - MARGIN * 2 - CELL_GUTTER * (cols - 1)) / cols;
+  const gridTop =
+    PAGE_H - MARGIN - HEADER_H - HEADER_GAP - FLOW_BAND_H - FLOW_BAND_GAP;
+  const gridAvailH = gridTop - MARGIN;
+  const cellH = (gridAvailH - CELL_GUTTER * (rows - 1)) / rows;
+  return { cols, rows, cellW, cellH, gridTop, perPage: cols * rows };
+}
+
+async function drawFlows(
+  pdf: PDFDocument,
+  font: PDFFont,
+  boldFont: PDFFont,
+  projectName: string,
+  versionLabel: string,
+  platform: Platform,
+  bezel: PDFImage | null,
+  flows: FlowGroup[],
+  images: FetchedImage[],
+): Promise<void> {
+  const grid = computeGrid(platform);
+
+  // Precompute total pages so the header can show "Page X of Y" across the
+  // whole document, not just within a flow.
+  let totalPages = 0;
+  for (const f of flows) totalPages += Math.ceil(f.frames.length / grid.perPage);
+
+  let pageNum = 0;
+  let imageOffset = 0;
+  for (const flow of flows) {
+    const flowImages = images.slice(imageOffset, imageOffset + flow.frames.length);
+    imageOffset += flow.frames.length;
+    const flowPages = Math.ceil(flow.frames.length / grid.perPage);
+
+    for (let p = 0; p < flowPages; p++) {
+      pageNum++;
+      const page = pdf.addPage([PAGE_W, PAGE_H]);
+      drawHeader(page, font, boldFont, projectName, versionLabel, pageNum, totalPages);
+      drawFlowBand(page, font, boldFont, flow.name, flow.frames.length, p, flowPages);
+
+      for (let cell = 0; cell < grid.perPage; cell++) {
+        const idx = p * grid.perPage + cell;
+        if (idx >= flow.frames.length) break;
+
+        const col = cell % grid.cols;
+        const row = Math.floor(cell / grid.cols);
+        const x = MARGIN + col * (grid.cellW + CELL_GUTTER);
+        const y = grid.gridTop - row * (grid.cellH + CELL_GUTTER) - grid.cellH;
+
+        await drawCell(
+          pdf,
+          page,
+          font,
+          boldFont,
+          platform,
+          bezel,
+          flow.frames[cell + p * grid.perPage]!,
+          flowImages[idx]!,
+          x,
+          y,
+          grid.cellW,
+          grid.cellH,
+        );
+      }
+    }
+  }
+}
+
+async function drawCell(
+  pdf: PDFDocument,
+  page: PDFPage,
+  font: PDFFont,
+  boldFont: PDFFont,
+  platform: Platform,
+  bezel: PDFImage | null,
+  frame: FrameEntry,
+  image: FetchedImage,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): Promise<void> {
+  const imageH = h - CAPTION_H - CAPTION_GAP;
+  const imageY = y + CAPTION_H + CAPTION_GAP;
+
+  if (platform === 'web' || !bezel) {
+    drawWebCard(pdf, page, font, image, x, imageY, w, imageH);
+  } else {
+    await drawBezeledCell(pdf, page, font, bezel, image, x, imageY, w, imageH);
+  }
+
+  drawCaption(page, font, boldFont, frame.name, x, y, w);
+}
+
+/**
+ * Web platform: a bordered, slightly-rounded card with the screenshot
+ * letterboxed inside on a black background — same visual language as
+ * DeviceFrame's web branch in the gallery.
+ */
+async function drawWebCard(
+  pdf: PDFDocument,
+  page: PDFPage,
+  font: PDFFont,
+  image: FetchedImage,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): Promise<void> {
+  page.drawRectangle({
+    x,
+    y,
+    width: w,
+    height: h,
+    color: SCREEN_BG,
+    borderColor: BORDER,
+    borderWidth: 0.5,
+  });
+
+  const embedded = await tryEmbed(pdf, image);
+  if (embedded) {
+    const fit = fitContain(embedded.width, embedded.height, w, h);
+    page.drawImage(embedded, {
+      x: x + (w - fit.w) / 2,
+      y: y + (h - fit.h) / 2,
+      width: fit.w,
+      height: fit.h,
+    });
+  } else {
+    drawPlaceholderLabel(page, font, placeholderText(image), x, y, w, h);
+  }
+}
+
+/**
+ * Mobile platforms: render the screenshot inside the iPhone bezel PNG. The
+ * bezel asset is opaque chrome around a transparent rounded screen cutout;
+ * we draw the screen content first (clipped to the same rounded rect the
+ * bezel exposes) then stamp the bezel on top.
+ */
+async function drawBezeledCell(
+  pdf: PDFDocument,
+  page: PDFPage,
+  font: PDFFont,
+  bezel: PDFImage,
+  image: FetchedImage,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): Promise<void> {
+  // Fit a bezel-aspect box inside the cell.
+  const cellRatio = w / h;
+  let bezelW: number;
+  let bezelH: number;
+  if (cellRatio > BEZEL_ASPECT) {
+    bezelH = h;
+    bezelW = h * BEZEL_ASPECT;
+  } else {
+    bezelW = w;
+    bezelH = w / BEZEL_ASPECT;
+  }
+  const bezelX = x + (w - bezelW) / 2;
+  const bezelY = y + (h - bezelH) / 2;
+
+  // Screen viewport — the area inside the bezel where pixels show through.
+  const screenW = bezelW * SCREEN_W_PCT;
+  const screenH = bezelH * SCREEN_H_PCT;
+  const screenX = bezelX + bezelW * SCREEN_INSET_X_PCT;
+  const screenY = bezelY + bezelH * SCREEN_INSET_Y_PCT;
+  const radius = Math.min(screenW * SCREEN_RADIUS_PCT, 60);
+
+  // Clip to the rounded screen rect so the screenshot's square corners
+  // don't poke into the bezel's rounded cutout.
+  page.pushOperators(pushGraphicsState());
+  drawRoundedRectPath(page, screenX, screenY, screenW, screenH, radius);
+  page.pushOperators(clip(), endPath());
+
+  // Black background fills any letterbox bars if the screenshot's aspect
+  // doesn't match the iPhone screen exactly.
+  page.drawRectangle({
+    x: screenX,
+    y: screenY,
+    width: screenW,
+    height: screenH,
+    color: SCREEN_BG,
+  });
+
+  const embedded = await tryEmbed(pdf, image);
+  if (embedded) {
+    const fit = fitContain(embedded.width, embedded.height, screenW, screenH);
+    page.drawImage(embedded, {
+      x: screenX + (screenW - fit.w) / 2,
+      y: screenY + (screenH - fit.h) / 2,
+      width: fit.w,
+      height: fit.h,
+    });
+  }
+
+  page.pushOperators(popGraphicsState());
+
+  // Bezel chrome stamped on top — its transparent screen area lets the
+  // clipped screenshot show through with the right rounded outline.
+  page.drawImage(bezel, {
+    x: bezelX,
+    y: bezelY,
+    width: bezelW,
+    height: bezelH,
+  });
+
+  if (!embedded) {
+    drawPlaceholderLabel(
+      page,
+      font,
+      placeholderText(image),
+      screenX,
+      screenY,
+      screenW,
+      screenH,
+    );
+  }
+}
+
+async function tryEmbed(pdf: PDFDocument, image: FetchedImage): Promise<PDFImage | null> {
+  if (image.kind !== 'png' && image.kind !== 'jpg') return null;
+  try {
+    return image.kind === 'png'
+      ? await pdf.embedPng(image.bytes)
+      : await pdf.embedJpg(image.bytes);
+  } catch {
+    return null;
+  }
+}
+
+function placeholderText(image: FetchedImage): string {
+  if (image.kind === 'missing') return 'No image';
+  if (image.kind === 'unsupported') return `Unsupported: ${image.reason}`;
+  return 'Could not embed image';
+}
+
+function fitContain(
+  srcW: number,
+  srcH: number,
+  boxW: number,
+  boxH: number,
+): { w: number; h: number } {
+  const srcRatio = srcW / srcH;
+  const boxRatio = boxW / boxH;
+  if (srcRatio > boxRatio) return { w: boxW, h: boxW / srcRatio };
+  return { w: boxH * srcRatio, h: boxH };
+}
+
+function drawCaption(
+  page: PDFPage,
+  font: PDFFont,
+  boldFont: PDFFont,
+  frameName: string,
+  x: number,
+  y: number,
+  w: number,
+): void {
+  const size = 9;
+  const text = fitText(safe(frameName) || 'Untitled', boldFont, size, w);
+  safeDrawText(page, text, {
+    x,
+    y: y + (CAPTION_H - size) / 2,
+    size,
+    font: boldFont,
+    color: TEXT_DARK,
+  });
+}
+
+function drawHeader(
+  page: PDFPage,
+  font: PDFFont,
+  boldFont: PDFFont,
+  projectName: string,
+  versionLabel: string,
+  pageNum: number,
+  totalPages: number,
+): void {
+  const y = PAGE_H - MARGIN - 14;
+  const titleSize = 11;
+  const metaSize = 9;
+  const title = fitText(safe(projectName), boldFont, titleSize, PAGE_W - MARGIN * 2 - 140);
+  safeDrawText(page, title, { x: MARGIN, y, size: titleSize, font: boldFont, color: TEXT_DARK });
+
+  const meta = `${safe(versionLabel)} · Page ${pageNum} of ${totalPages}`;
+  const metaWidth = font.widthOfTextAtSize(meta, metaSize);
+  safeDrawText(page, meta, {
+    x: PAGE_W - MARGIN - metaWidth,
+    y: y + 1,
+    size: metaSize,
+    font,
+    color: TEXT_MUTED,
+  });
+
+  page.drawLine({
+    start: { x: MARGIN, y: y - 8 },
+    end: { x: PAGE_W - MARGIN, y: y - 8 },
+    thickness: 0.5,
+    color: BORDER,
+  });
+}
+
+function drawFlowBand(
+  page: PDFPage,
+  font: PDFFont,
+  boldFont: PDFFont,
+  flowName: string,
+  totalScreens: number,
+  pageIdxInFlow: number,
+  flowTotalPages: number,
+): void {
+  const bandY = PAGE_H - MARGIN - HEADER_H - HEADER_GAP - FLOW_BAND_H;
+  page.drawRectangle({
+    x: MARGIN,
+    y: bandY,
+    width: PAGE_W - MARGIN * 2,
+    height: FLOW_BAND_H,
+    color: SURFACE,
+    borderColor: BORDER,
+    borderWidth: 0.5,
+  });
+
+  // Small "Flow" kicker, then flow name on the same row.
+  const kickerSize = 8;
+  const titleSize = 13;
+  const innerPad = 12;
+  const baselineY = bandY + (FLOW_BAND_H - titleSize) / 2 + 2;
+
+  const kicker = 'FLOW';
+  safeDrawText(page, kicker, {
+    x: MARGIN + innerPad,
+    y: baselineY + 1,
+    size: kickerSize,
+    font,
+    color: TEXT_MUTED,
+  });
+  const kickerW = font.widthOfTextAtSize(kicker, kickerSize);
+
+  const titleX = MARGIN + innerPad + kickerW + 10;
+  const rightLabel =
+    flowTotalPages > 1
+      ? `${totalScreens} screens · ${pageIdxInFlow + 1}/${flowTotalPages}`
+      : `${totalScreens} screen${totalScreens === 1 ? '' : 's'}`;
+  const rightSize = 9;
+  const rightW = font.widthOfTextAtSize(rightLabel, rightSize);
+  const titleMax = PAGE_W - MARGIN - innerPad - rightW - 14 - titleX;
+  const title = fitText(safe(flowName) || 'Untitled flow', boldFont, titleSize, Math.max(0, titleMax));
+  safeDrawText(page, title, {
+    x: titleX,
+    y: baselineY,
+    size: titleSize,
+    font: boldFont,
+    color: TEXT_DARK,
+  });
+
+  safeDrawText(page, rightLabel, {
+    x: PAGE_W - MARGIN - innerPad - rightW,
+    y: baselineY + 2,
+    size: rightSize,
+    font,
+    color: TEXT_MUTED,
+  });
+}
+
+function drawEmptyState(
+  pdf: PDFDocument,
+  font: PDFFont,
+  boldFont: PDFFont,
+  projectName: string,
+  versionLabel: string,
+): void {
+  const page = pdf.addPage([PAGE_W, PAGE_H]);
+  drawHeader(page, font, boldFont, projectName, versionLabel, 1, 1);
+  const msg = 'No screens captured for this version yet.';
+  const size = 11;
+  const w = font.widthOfTextAtSize(msg, size);
+  safeDrawText(page, msg, {
+    x: (PAGE_W - w) / 2,
+    y: PAGE_H / 2,
+    size,
+    font,
+    color: TEXT_MUTED,
+  });
+}
+
+function drawPlaceholderLabel(
+  page: PDFPage,
+  font: PDFFont,
+  label: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  const size = 9;
+  const text = fitText(safe(label), font, size, w - 16);
+  const tw = font.widthOfTextAtSize(text, size);
+  safeDrawText(page, text, {
+    x: x + (w - tw) / 2,
+    y: y + h / 2 - size / 2,
+    size,
+    font,
+    color: TEXT_MUTED,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Path helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const KAPPA = 0.5522847498307936; // 4*(sqrt(2)-1)/3 — quarter-circle approx
+
+function drawRoundedRectPath(
+  page: PDFPage,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  const c = radius * (1 - KAPPA);
+  page.pushOperators(
+    moveTo(x + radius, y),
+    lineTo(x + w - radius, y),
+    appendBezierCurve(x + w - c, y, x + w, y + c, x + w, y + radius),
+    lineTo(x + w, y + h - radius),
+    appendBezierCurve(x + w, y + h - c, x + w - c, y + h, x + w - radius, y + h),
+    lineTo(x + radius, y + h),
+    appendBezierCurve(x + c, y + h, x, y + h - c, x, y + h - radius),
+    lineTo(x, y + radius),
+    appendBezierCurve(x, y + c, x + c, y, x + radius, y),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Text helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function fitText(text: string, font: PDFFont, size: number, maxWidth: number): string {
+  if (maxWidth <= 0) return '';
+  if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
+  const ellipsis = '...';
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1;
+    if (font.widthOfTextAtSize(text.slice(0, mid) + ellipsis, size) <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + ellipsis;
+}
+
+// WinAnsi (the Helvetica encoding) covers Latin-1 + a few extras but not
+// everything. Anything outside it would throw inside drawText; sanitize
+// unknown code points to '?' so a single weird name never aborts the PDF.
+function safe(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 0x20) {
+      out += ' ';
+    } else if (code <= 0x7e || (code >= 0xa0 && code <= 0xff)) {
+      out += ch;
+    } else if (code === 0x2026) {
+      out += '...';
+    } else {
+      out += '?';
+    }
+  }
+  return out;
+}
+
+function safeDrawText(
+  page: PDFPage,
+  text: string,
+  opts: { x: number; y: number; size: number; font: PDFFont; color: ReturnType<typeof rgb> },
+): void {
+  try {
+    page.drawText(text, opts);
+  } catch {
+    page.drawText(text.replace(/[^\x20-\x7e]/g, '?'), opts);
+  }
+}

@@ -397,6 +397,13 @@ drop policy if exists comments_author_update on public.comments;
 create policy comments_author_update on public.comments for update
   using (author_id = auth.uid());
 
+-- Agency members can update any comment they can see (currently used to
+-- toggle resolved_at / resolved_by). Without this policy the resolve
+-- action silently affects 0 rows for non-author agency users.
+drop policy if exists comments_agency_update on public.comments;
+create policy comments_agency_update on public.comments for update
+  using (public.is_agency()) with check (public.is_agency());
+
 drop policy if exists comments_author_delete on public.comments;
 create policy comments_author_delete on public.comments for delete
   using (author_id = auth.uid() or public.is_agency());

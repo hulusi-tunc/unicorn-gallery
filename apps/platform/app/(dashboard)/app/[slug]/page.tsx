@@ -8,6 +8,7 @@ import { JourneyStrip } from '@/components/journey-strip';
 import {
   type FrameUnresolvedSummary,
   getAppBySlug,
+  getBuildByVersion,
   getManifestForApp,
   getUnresolvedCommentsByFrame,
 } from '@/lib/queries';
@@ -43,17 +44,23 @@ function buildFlowTree(flows: readonly ManifestFlow[]): FlowNode[] {
 
 export default async function AppOverviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ v?: string }>;
 }): Promise<ReactNode> {
-  const { slug } = await params;
+  const [{ slug }, sp] = await Promise.all([params, searchParams]);
   const app = await getAppBySlug(decodeURIComponent(slug));
   if (!app) notFound();
 
-  // Read from the `frames` table, not builds.manifest — the latter only stores
-  // the last upload batch when capture chunks. See snap-bridge / capture pipeline
-  // notes in project memory.
-  const manifest = await getManifestForApp(app.id);
+  // `?v=N` switches to a specific version; absent means latest.
+  const versionParam = sp.v ? Number(sp.v) : null;
+  const selectedBuild =
+    versionParam != null && Number.isFinite(versionParam)
+      ? await getBuildByVersion(app.id, versionParam)
+      : null;
+
+  const manifest = await getManifestForApp(app.id, selectedBuild?.id);
 
   if (!manifest || manifest.flows.length === 0) {
     return (
@@ -97,6 +104,7 @@ export default async function AppOverviewPage({
             appSlug={app.slug}
             isSub={false}
             unresolvedByFrame={unresolvedByFrame}
+            versionQuery={selectedBuild ? `?v=${selectedBuild.version ?? ''}` : ''}
           />
         ))}
       </div>
@@ -110,13 +118,21 @@ function FlowSection({
   appSlug,
   isSub,
   unresolvedByFrame,
+  versionQuery,
 }: {
   node: FlowNode;
   platform: 'ios' | 'android' | 'web';
   appSlug: string;
   isSub: boolean;
   unresolvedByFrame: Map<string, FrameUnresolvedSummary>;
+  versionQuery: string;
 }): ReactNode {
+  // A flow with no frames is a container — used purely to group child
+  // sub-flows under one header. Skip the JourneyStrip (an empty horizontal
+  // band the user reads as "image goes here") and render a compact section
+  // heading instead. The child sub-flows below still render normally.
+  const isContainer = node.flow.frames.length === 0;
+
   return (
     <section
       id={`flow-${node.flow.id}`}
@@ -132,7 +148,7 @@ function FlowSection({
         className={
           isSub
             ? 'flex items-baseline justify-between px-2 pb-2'
-            : 'flex items-baseline justify-between px-8 pb-3'
+            : `flex items-baseline justify-between px-8 ${isContainer ? 'pb-0' : 'pb-3'}`
         }
       >
         <div>
@@ -149,18 +165,29 @@ function FlowSection({
             {node.flow.id}
           </p>
         </div>
-        <span className="text-xs text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-          {node.flow.frames.length} frame{node.flow.frames.length === 1 ? '' : 's'}
-        </span>
+        {isContainer ? (
+          node.children.length > 0 ? (
+            <span className="text-xs text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
+              {node.children.length} sub-flow{node.children.length === 1 ? '' : 's'}
+            </span>
+          ) : null
+        ) : (
+          <span className="text-xs text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
+            {node.flow.frames.length} frame{node.flow.frames.length === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
-      <JourneyStrip
-        flow={node.flow}
-        platform={platform}
-        appSlug={appSlug}
-        unresolvedByFrame={unresolvedByFrame}
-      />
+      {isContainer ? null : (
+        <JourneyStrip
+          flow={node.flow}
+          platform={platform}
+          appSlug={appSlug}
+          unresolvedByFrame={unresolvedByFrame}
+          versionQuery={versionQuery}
+        />
+      )}
       {node.children.length > 0 && (
-        <div className="mt-6 flex flex-col gap-8">
+        <div className={`${isContainer ? 'mt-3' : 'mt-6'} flex flex-col gap-8`}>
           {node.children.map((child) => (
             <FlowSection
               key={child.flow.id}
@@ -169,6 +196,7 @@ function FlowSection({
               appSlug={appSlug}
               isSub={true}
               unresolvedByFrame={unresolvedByFrame}
+              versionQuery={versionQuery}
             />
           ))}
         </div>

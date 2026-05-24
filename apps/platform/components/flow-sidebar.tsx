@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import type { Manifest, ManifestFlow } from '@unicorn-studio/gallery-capture';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
@@ -43,6 +43,11 @@ export function FlowSidebar({
   const { theme } = useTheme();
   const t = getNd(theme);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const versionParam = searchParams?.get('v');
+  // Preserve `?v=N` across sidebar nav so browsing flows inside a past
+  // version stays scoped to that version.
+  const versionQuery = versionParam ? `?v=${versionParam}` : '';
   const segs = pathname.split('/').filter(Boolean);
   const activeFlowId = segs.length >= 3 ? decodeURIComponent(segs[2] ?? '') : '';
   // "on overview" = exactly /app/<slug> — we use this to decide whether
@@ -144,6 +149,7 @@ export function FlowSidebar({
               onOverview={onOverview}
               t={t}
               unreadByFlow={unreadByFlow}
+              versionQuery={versionQuery}
             />
           ))
         )}
@@ -191,6 +197,7 @@ function FlowTreeNode({
   onOverview,
   t,
   unreadByFlow,
+  versionQuery,
 }: {
   node: FlowNode;
   depth: number;
@@ -199,13 +206,14 @@ function FlowTreeNode({
   onOverview: boolean;
   t: ReturnType<typeof getNd>;
   unreadByFlow?: Map<string, number>;
+  versionQuery: string;
 }): ReactNode {
   const active = node.flow.id === activeFlowId;
   const unread = unreadByFlow?.get(node.flow.id) ?? 0;
   return (
     <>
       <FlowLink
-        href={`/app/${encodeURIComponent(appSlug)}#flow-${encodeURIComponent(node.flow.id)}`}
+        href={`/app/${encodeURIComponent(appSlug)}${versionQuery}#flow-${encodeURIComponent(node.flow.id)}`}
         flowId={node.flow.id}
         name={node.flow.name}
         count={node.flow.frames.length}
@@ -225,6 +233,7 @@ function FlowTreeNode({
           onOverview={onOverview}
           t={t}
           unreadByFlow={unreadByFlow}
+          versionQuery={versionQuery}
         />
       ))}
     </>

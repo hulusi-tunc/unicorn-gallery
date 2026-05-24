@@ -22,11 +22,14 @@ export function Filmstrip({
   platform,
   appSlug,
   activeFrameId,
+  versionQuery = '',
 }: {
   flow: ManifestFlow;
   platform: Platform;
   appSlug: string;
   activeFrameId: string;
+  /** Pre-formatted `?v=N` query string for past-version browsing. Empty when latest. */
+  versionQuery?: string;
 }): ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = platform !== 'web';
@@ -50,6 +53,7 @@ export function Filmstrip({
           appSlug={appSlug}
           isMobile={isMobile}
           active={frame.id === activeFrameId}
+          versionQuery={versionQuery}
         />
       ))}
     </div>
@@ -63,6 +67,7 @@ function FilmstripCell({
   appSlug,
   isMobile,
   active,
+  versionQuery,
 }: {
   frame: ManifestFrame;
   step: number;
@@ -70,11 +75,12 @@ function FilmstripCell({
   appSlug: string;
   isMobile: boolean;
   active: boolean;
+  versionQuery: string;
 }): ReactNode {
   return (
     <Link
       data-active={active}
-      href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flowId)}/${encodeURIComponent(frame.id)}`}
+      href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flowId)}/${encodeURIComponent(frame.id)}${versionQuery}`}
       className={cn(
         'group flex shrink-0 flex-col items-center gap-1.5 rounded-md p-1.5 transition-colors',
         active

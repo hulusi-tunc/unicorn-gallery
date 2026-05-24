@@ -22,6 +22,7 @@ export function JourneyStrip({
   appSlug,
   freshFrameKeys,
   unresolvedByFrame,
+  versionQuery = '',
 }: {
   flow: ManifestFlow;
   platform: Platform;
@@ -38,6 +39,8 @@ export function JourneyStrip({
    * what's open.
    */
   unresolvedByFrame?: Map<string, FrameUnresolvedSummary>;
+  /** Pre-formatted `?v=N` query string for past-version browsing. Empty when latest. */
+  versionQuery?: string;
 }): ReactNode {
   return (
     <div className="no-scrollbar overflow-x-auto px-10 pb-10 pt-4">
@@ -48,7 +51,7 @@ export function JourneyStrip({
               frame={frame}
               step={i + 1}
               platform={platform}
-              href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(frame.id)}`}
+              href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(frame.id)}${versionQuery}`}
               isFresh={freshFrameKeys?.has(frame.id) ?? false}
               unresolved={unresolvedByFrame?.get(frame.id) ?? null}
             />

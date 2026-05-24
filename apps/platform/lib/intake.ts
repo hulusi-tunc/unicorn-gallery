@@ -77,29 +77,13 @@ export async function ingestCapture({
 }): Promise<IntakeResult | IntakeError> {
   const admin = getSupabaseAdminClient();
 
-  // We DON'T delete frames upfront in replace mode anymore — that
-  // cascades through `frames → comments` and silently wipes every PM
-  // review thread on the project. Instead we let the upsert below
-  // refresh whatever exists, then trim orphans (frames not in the
-  // incoming manifest) AFTER. Comments stay attached to the frame.id
-  // they were originally posted on; missing frames cascade-delete
-  // their orphan comments only, not the active ones.
-  //
-  // Builds are still wiped in replace mode — they're append-only
-  // history rows, not user-authored content. Builds delete via FK
-  // cascade hits frames.latest_build_id which is set during the
-  // upsert below, so the order is: clear builds → upsert frames →
-  // delete orphan frames. Empty-state blink during the swap is
-  // minimal (one async tick).
-  if (replace) {
-    const { error: delBuildsErr } = await admin
-      .from('builds')
-      .delete()
-      .eq('app_id', appId);
-    if (delBuildsErr) {
-      return { status: 500, message: `Replace failed (builds): ${delBuildsErr.message}` };
-    }
-  }
+  // Every push is an immutable version. We never delete `builds` (history)
+  // or orphan `frames` (their comments). Frames that don't appear in the
+  // incoming manifest stop being part of the latest version but stay in
+  // the DB so the version switcher can render them in their original
+  // version. `replace` is now a soft signal — it controls whether the
+  // new build becomes the "latest" snapshot for the app's default view,
+  // not whether to destroy data.
 
   // 1. Upload each screenshot to Storage and rewrite manifest URLs.
   // Past versions (frame.versions[]) ride alongside — each gets its own
@@ -369,28 +353,11 @@ export async function ingestCapture({
     }
   }
 
-  // 5. Orphan cleanup (replace-mode only). Frames that exist in the DB
-  // for this app but weren't in the incoming manifest get deleted now.
-  // Comments on those orphan frames cascade-delete with them — but the
-  // designer only loses comments on frames they explicitly removed from
-  // their desktop, which is the right behavior. Comments on
-  // upsert-matched frames stay intact.
-  if (replace) {
-    const { error: orphanErr } =
-      upsertedFrameIds.length > 0
-        ? await admin
-            .from('frames')
-            .delete()
-            .eq('app_id', appId)
-            .not('id', 'in', `(${upsertedFrameIds.map((id) => `"${id}"`).join(',')})`)
-        : await admin.from('frames').delete().eq('app_id', appId);
-    if (orphanErr) {
-      return {
-        status: 500,
-        message: `Orphan frame cleanup failed: ${orphanErr.message}`,
-      };
-    }
-  }
+  // 5. Orphan handling. Frames not in the incoming manifest stay in the
+  // DB so old version views can still render them with their comments.
+  // We don't delete anything — version isolation is handled at read
+  // time by filtering on `frame_versions.build_id` for the version
+  // being viewed.
 
   return {
     appId,

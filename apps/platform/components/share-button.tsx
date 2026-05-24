@@ -7,17 +7,22 @@ import {
   Loader2,
   Lock,
   Mail,
+  Plus,
   RefreshCw,
+  Search,
   Shuffle,
   Share2,
   Trash2,
+  UserPlus,
   X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   useEffect,
+  useMemo,
   useState,
   useTransition,
+  type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from 'react';
@@ -25,11 +30,12 @@ import { createPortal } from 'react-dom';
 import { useTheme } from '@/components/providers/theme-provider';
 import { UserAvatar } from '@/components/user-avatar';
 import {
+  addExistingCustomer,
   inviteCustomer,
   removeCustomer,
   setPublicShareToken,
 } from '@/lib/actions/customers';
-import type { AppCustomerWithProfile } from '@/lib/queries';
+import type { AppCustomerWithProfile, EligibleCustomer } from '@/lib/queries';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
 interface ShareButtonProps {
@@ -38,6 +44,7 @@ interface ShareButtonProps {
   appName: string;
   publicShareToken: string | null;
   customers: AppCustomerWithProfile[];
+  eligibleCustomers: EligibleCustomer[];
 }
 
 export function ShareButton(props: ShareButtonProps): ReactNode {
@@ -80,6 +87,7 @@ function ShareDialog({
   appName,
   publicShareToken,
   customers,
+  eligibleCustomers,
   onClose,
   t,
 }: ShareButtonProps & {
@@ -184,11 +192,17 @@ function ShareDialog({
         </div>
 
         <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <InviteSection appId={appId} appSlug={appSlug} t={t} />
           <CustomerList
             appId={appId}
             appSlug={appSlug}
             customers={customers}
+            t={t}
+          />
+          <AddCustomerArea
+            appId={appId}
+            appSlug={appSlug}
+            eligibleCustomers={eligibleCustomers}
+            hasCustomers={customers.length > 0}
             t={t}
           />
           <PublicLinkSection
@@ -267,7 +281,7 @@ function InviteSection({
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <SectionLabel t={t} icon={<Mail size={11} />}>
-        Add customer
+        Create new customer
       </SectionLabel>
       <form
         onSubmit={onSubmit}
@@ -488,6 +502,316 @@ function CopyableLink({
         {copied ? 'Copied' : 'Copy'}
       </button>
     </div>
+  );
+}
+
+/**
+ * Collapsed-by-default add-customer affordance. Sits below the "People
+ * with access" list and shows two compact trigger buttons; clicking one
+ * expands the matching inline form. Keeps the dialog minimal at rest so
+ * the existing customer list isn't buried under a wall of inputs.
+ */
+function AddCustomerArea({
+  appId,
+  appSlug,
+  eligibleCustomers,
+  hasCustomers,
+  t,
+}: {
+  appId: string;
+  appSlug: string;
+  eligibleCustomers: EligibleCustomer[];
+  hasCustomers: boolean;
+  t: ReturnType<typeof getNd>;
+}): ReactNode {
+  const [mode, setMode] = useState<'idle' | 'existing' | 'create'>('idle');
+
+  if (mode === 'idle') {
+    return (
+      <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {!hasCustomers ? (
+          <p
+            style={{
+              fontSize: 12,
+              color: t.textSecondary,
+              margin: 0,
+              padding: '14px 10px',
+              textAlign: 'center',
+              border: `1px dashed ${t.border}`,
+              borderRadius: 10,
+            }}
+          >
+            No customers yet — add one below.
+          </p>
+        ) : null}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setMode('existing')}
+            style={triggerButton(t)}
+          >
+            <UserPlus size={12} />
+            Add existing customer
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('create')}
+            style={triggerButton(t)}
+          >
+            <Plus size={12} />
+            Create new customer
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {mode === 'existing' ? (
+        <ExistingCustomersSection
+          appId={appId}
+          appSlug={appSlug}
+          eligibleCustomers={eligibleCustomers}
+          t={t}
+        />
+      ) : (
+        <InviteSection appId={appId} appSlug={appSlug} t={t} />
+      )}
+      <button
+        type="button"
+        onClick={() => setMode('idle')}
+        style={{
+          alignSelf: 'flex-start',
+          background: 'transparent',
+          border: 'none',
+          padding: '2px 0',
+          fontFamily: editorialFonts.mono,
+          fontSize: 10,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: t.textSecondary,
+          cursor: 'pointer',
+        }}
+      >
+        ← Back
+      </button>
+    </section>
+  );
+}
+
+function triggerButton(t: ReturnType<typeof getNd>): CSSProperties {
+  return {
+    flex: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 34,
+    borderRadius: 10,
+    border: `1px dashed ${t.borderVisible}`,
+    background: 'transparent',
+    color: t.textSecondary,
+    fontFamily: editorialFonts.body,
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'background 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out',
+  };
+}
+
+function ExistingCustomersSection({
+  appId,
+  appSlug,
+  eligibleCustomers,
+  t,
+}: {
+  appId: string;
+  appSlug: string;
+  eligibleCustomers: EligibleCustomer[];
+  t: ReturnType<typeof getNd>;
+}): ReactNode {
+  const router = useRouter();
+  const [query, setQuery] = useState('');
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+
+  // Only show customers who aren't already on this app — once added, they
+  // appear in the "People with access" list below and don't need to be
+  // selectable again.
+  const candidates = useMemo(
+    () => eligibleCustomers.filter((c) => !c.alreadyOnThisApp),
+    [eligibleCustomers],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return candidates;
+    return candidates.filter((c) => {
+      const name = c.profile.name?.toLowerCase() ?? '';
+      const email = c.profile.email.toLowerCase();
+      return name.includes(q) || email.includes(q);
+    });
+  }, [candidates, query]);
+
+  const onAdd = async (c: EligibleCustomer): Promise<void> => {
+    setError(null);
+    setPendingId(c.user_id);
+    const res = await addExistingCustomer({
+      appId,
+      appSlug,
+      userId: c.user_id,
+    });
+    setPendingId(null);
+    if (res.error) {
+      setError(res.error);
+    } else {
+      setJustAddedId(c.user_id);
+      router.refresh();
+    }
+  };
+
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <SectionLabel t={t} icon={<UserPlus size={11} />}>
+        Existing customers ({candidates.length})
+      </SectionLabel>
+      <div style={{ position: 'relative' }}>
+        <Search
+          size={13}
+          style={{
+            position: 'absolute',
+            left: 10,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: t.textSecondary,
+            pointerEvents: 'none',
+          }}
+        />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+          placeholder="Search by name or email"
+          style={{ ...inputStyle(t), paddingLeft: 30 }}
+        />
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+          background: t.surface,
+          border: `1px solid ${t.border}`,
+          borderRadius: 10,
+          padding: 4,
+          maxHeight: 240,
+          overflow: 'auto',
+        }}
+      >
+        {filtered.length === 0 ? (
+          <p
+            style={{
+              fontSize: 12,
+              color: t.textSecondary,
+              margin: 0,
+              padding: '12px 10px',
+              textAlign: 'center',
+            }}
+          >
+            No matching customers.
+          </p>
+        ) : (
+          filtered.map((c) => {
+            const display =
+              c.profile.name?.trim() || c.profile.email.split('@')[0] || c.profile.email;
+            const pending = pendingId === c.user_id;
+            const justAdded = justAddedId === c.user_id;
+            const otherAppsLabel =
+              c.otherApps.length > 0
+                ? `Also on ${c.otherApps
+                    .slice(0, 2)
+                    .map((a) => a.name)
+                    .join(', ')}${c.otherApps.length > 2 ? ` +${c.otherApps.length - 2}` : ''}`
+                : null;
+            return (
+              <div
+                key={c.user_id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                }}
+              >
+                <UserAvatar
+                  name={c.profile.name}
+                  email={c.profile.email}
+                  avatarUrl={c.profile.avatar_url}
+                  size={28}
+                  background={t.accentSubtle}
+                  color={t.accent}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: t.textDisplay,
+                      margin: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {display}
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 11,
+                      color: t.textSecondary,
+                      margin: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {c.profile.email}
+                    {otherAppsLabel ? ` · ${otherAppsLabel}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onAdd(c)}
+                  disabled={pending || justAdded}
+                  style={{
+                    ...ghostButton(t),
+                    padding: '6px 10px',
+                    fontSize: 12,
+                    opacity: pending ? 0.5 : 1,
+                    color: justAdded ? t.success : t.textPrimary,
+                  }}
+                >
+                  {pending ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : justAdded ? (
+                    <Check size={12} />
+                  ) : (
+                    <Plus size={12} />
+                  )}
+                  {pending ? 'Adding…' : justAdded ? 'Added' : 'Add'}
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+      {error ? (
+        <p style={{ fontSize: 12, color: t.danger, margin: 0 }}>{error}</p>
+      ) : null}
+    </section>
   );
 }
 

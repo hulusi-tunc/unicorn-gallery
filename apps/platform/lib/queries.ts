@@ -306,6 +306,26 @@ export const getLatestBuild = cache(async (appId: string): Promise<Build | null>
 });
 
 /**
+ * Look up a specific build by its per-app version number. Powers the
+ * `?v=N` URL contract — the dropdown links to `?v=2`, this query
+ * resolves it to the build's UUID for `getManifestForApp(appId, buildId)`.
+ */
+export async function getBuildByVersion(
+  appId: string,
+  version: number,
+): Promise<Build | null> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('builds')
+    .select('*')
+    .eq('app_id', appId)
+    .eq('version', version)
+    .maybeSingle();
+  if (error) return null;
+  return data as Build | null;
+}
+
+/**
  * Per-frame unread comment count for the current user.
  * Returned as a Map<frame_row_id, unread_count> so the caller can spread
  * indicator badges across thumbnails / sidebar / app cards.
@@ -550,6 +570,90 @@ export async function listAppCustomers(appId: string): Promise<AppCustomerWithPr
   return (data ?? []) as unknown as AppCustomerWithProfile[];
 }
 
+export interface EligibleCustomer {
+  user_id: string;
+  profile: ProfileLite;
+  /** True when this customer is already linked to the current app. */
+  alreadyOnThisApp: boolean;
+  /** Names of other (non-archived) apps this customer is already on. */
+  otherApps: { slug: string; name: string }[];
+}
+
+/**
+ * Lists every customer profile in the system, with hints about which apps
+ * each one already has access to. Powers the "existing customers" picker
+ * in the Share dialog so an agency PM can attach a known customer to a
+ * new app in one click — no email re-typing, no duplicate auth accounts
+ * from typos.
+ *
+ * The source of truth is `profiles` (role='customer'), NOT `app_customers`
+ * — a customer who exists but has no app linkage yet (e.g. role flipped
+ * manually from the admin page) still shows up in the picker.
+ */
+export async function listEligibleCustomersForApp(
+  appId: string,
+): Promise<EligibleCustomer[]> {
+  const supabase = await getSupabaseServerClient();
+
+  const [profilesRes, linksRes] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, email, name, flavor, avatar_url')
+      .eq('role', 'customer'),
+    supabase
+      .from('app_customers')
+      .select('user_id, app:apps!inner(id, slug, name, archived_at)'),
+  ]);
+
+  if (profilesRes.error) return [];
+
+  const profiles = (profilesRes.data ?? []) as unknown as ProfileLite[];
+  const links = (linksRes.data ?? []) as unknown as Array<{
+    user_id: string;
+    app: { id: string; slug: string; name: string; archived_at: string | null };
+  }>;
+
+  const linksByUser = new Map<
+    string,
+    { alreadyOnThisApp: boolean; otherApps: { slug: string; name: string }[] }
+  >();
+  for (const row of links) {
+    if (row.app.archived_at) continue;
+    let entry = linksByUser.get(row.user_id);
+    if (!entry) {
+      entry = { alreadyOnThisApp: false, otherApps: [] };
+      linksByUser.set(row.user_id, entry);
+    }
+    if (row.app.id === appId) {
+      entry.alreadyOnThisApp = true;
+    } else {
+      entry.otherApps.push({ slug: row.app.slug, name: row.app.name });
+    }
+  }
+
+  return profiles
+    .map<EligibleCustomer>((p) => {
+      const link = linksByUser.get(p.id);
+      return {
+        user_id: p.id,
+        profile: {
+          id: p.id,
+          email: p.email,
+          name: p.name,
+          flavor: p.flavor,
+          avatar_url: p.avatar_url,
+        },
+        alreadyOnThisApp: link?.alreadyOnThisApp ?? false,
+        otherApps: link?.otherApps ?? [],
+      };
+    })
+    .sort((a, b) => {
+      const an = a.profile.name?.trim() || a.profile.email;
+      const bn = b.profile.name?.trim() || b.profile.email;
+      return an.localeCompare(bn);
+    });
+}
+
 export async function listFramesForApp(appId: string): Promise<Frame[]> {
   const supabase = await getSupabaseServerClient();
   // Order by capture-assigned positions so the web view mirrors the
@@ -568,20 +672,47 @@ export async function listFramesForApp(appId: string): Promise<Frame[]> {
 }
 
 /**
- * Reconstruct a manifest from the `frames` table (source of truth) instead
- * of `builds.manifest` (only ever holds the most recent upload's snapshot —
- * which is the last batch when the capture client chunks).
+ * Reconstruct a manifest for an app at a specific version.
  *
- * Returns null if there are no frames for the app yet.
+ * - When `buildId` is omitted: returns the LATEST view, built from the
+ *   `frames` table (source of truth for positions, parent_flow_id, names).
+ *   This is what every page renders by default.
+ * - When `buildId` is provided: returns that version's snapshot, built from
+ *   `frame_versions` rows for that build. Positions and parent_flow_id are
+ *   filled in from the `frames` table when the frame still exists there;
+ *   otherwise they default to insertion order / null.
+ *
+ * Returns null if the app has no frames at that version.
  */
 export const getManifestForApp = cache(async (
   appId: string,
+  buildId?: string,
 ): Promise<ManifestSnapshot | null> => {
+  if (buildId) {
+    return getManifestForBuild(appId, buildId);
+  }
   const [latestBuild, frames] = await Promise.all([
     getLatestBuild(appId),
     listFramesForApp(appId),
   ]);
   if (frames.length === 0) return null;
+
+  // Only render frames that are part of the latest version. After the
+  // version-history rewrite we no longer delete orphan frames on replace
+  // pushes — they stay so old version views can render them — so the
+  // `frames` table can contain rows from prior versions. Filter to the
+  // current build's frame_versions to scope the default view correctly.
+  const currentKeys = latestBuild
+    ? await listFrameKeysForBuild(latestBuild.id)
+    : null;
+
+  // If frame_versions has no rows for the latest build (pre-migration
+  // legacy data, or some odd state) fall back to showing every frame so
+  // the dashboard isn't accidentally blank.
+  const visibleFrames =
+    currentKeys && currentKeys.size > 0
+      ? frames.filter((f) => currentKeys.has(`${f.flow_id}::${f.frame_id}`))
+      : frames;
 
   const byFlow = new Map<
     string,
@@ -592,7 +723,7 @@ export const getManifestForApp = cache(async (
       frames: Frame[];
     }
   >();
-  for (const f of frames) {
+  for (const f of visibleFrames) {
     let g = byFlow.get(f.flow_id);
     if (!g) {
       g = {
@@ -603,8 +734,6 @@ export const getManifestForApp = cache(async (
       };
       byFlow.set(f.flow_id, g);
     } else if (g.parentFlowId == null && f.parent_flow_id) {
-      // Earlier rows for this flow may pre-date the parent migration.
-      // Pick up the parent the moment any row references it.
       g.parentFlowId = f.parent_flow_id;
     }
     g.frames.push(f);
@@ -627,6 +756,146 @@ export const getManifestForApp = cache(async (
     })),
   };
 });
+
+/**
+ * Returns the set of `${flow_id}::${frame_id}` keys that belong to a given
+ * build. Used to filter the latest-view manifest to current-version frames.
+ */
+async function listFrameKeysForBuild(buildId: string): Promise<Set<string>> {
+  const supabase = await getSupabaseServerClient();
+  const { data } = await supabase
+    .from('frame_versions')
+    .select('flow_id, frame_id')
+    .eq('build_id', buildId);
+  const out = new Set<string>();
+  for (const r of (data ?? []) as Array<{ flow_id: string; frame_id: string }>) {
+    out.add(`${r.flow_id}::${r.frame_id}`);
+  }
+  return out;
+}
+
+/**
+ * Build a manifest for a specific (non-current) build. Reads
+ * `frame_versions` for the version's screen list + per-version image_url +
+ * frame_name, then joins with the `frames` table for structural metadata
+ * (parent_flow_id, positions). Frames that no longer exist in `frames`
+ * (e.g. the desktop-reset scenario where IDs changed) fall back to
+ * insertion order.
+ */
+async function getManifestForBuild(
+  appId: string,
+  buildId: string,
+): Promise<ManifestSnapshot | null> {
+  const supabase = await getSupabaseServerClient();
+  const [versionsResult, build] = await Promise.all([
+    supabase
+      .from('frame_versions')
+      .select('flow_id, frame_id, flow_name, frame_name, image_url')
+      .eq('build_id', buildId)
+      .eq('app_id', appId),
+    (async () => {
+      const { data } = await supabase
+        .from('builds')
+        .select('sha, captured_at, platform')
+        .eq('id', buildId)
+        .eq('app_id', appId)
+        .maybeSingle();
+      return data as { sha: string; captured_at: string; platform: string } | null;
+    })(),
+  ]);
+  const versions = (versionsResult.data ?? []) as Array<{
+    flow_id: string;
+    frame_id: string;
+    flow_name: string;
+    frame_name: string;
+    image_url: string;
+  }>;
+  if (versions.length === 0) return null;
+
+  // Pull structural fields from `frames` for frames that still exist
+  // (positions, parent_flow_id). Build a lookup by (flow_id, frame_id).
+  const { data: frameRows } = await supabase
+    .from('frames')
+    .select('flow_id, frame_id, parent_flow_id, flow_position, frame_position')
+    .eq('app_id', appId);
+  const structural = new Map<
+    string,
+    {
+      parent_flow_id: string | null;
+      flow_position: number | null;
+      frame_position: number | null;
+    }
+  >();
+  for (const r of (frameRows ?? []) as Array<{
+    flow_id: string;
+    frame_id: string;
+    parent_flow_id: string | null;
+    flow_position: number | null;
+    frame_position: number | null;
+  }>) {
+    structural.set(`${r.flow_id}::${r.frame_id}`, {
+      parent_flow_id: r.parent_flow_id,
+      flow_position: r.flow_position,
+      frame_position: r.frame_position,
+    });
+  }
+
+  const byFlow = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      parentFlowId: string | null;
+      position: number | null;
+      frames: Array<{
+        id: string;
+        name: string;
+        image: string;
+        position: number | null;
+      }>;
+    }
+  >();
+  let frameOrderCounter = 0;
+  for (const v of versions) {
+    const s = structural.get(`${v.flow_id}::${v.frame_id}`);
+    let g = byFlow.get(v.flow_id);
+    if (!g) {
+      g = {
+        id: v.flow_id,
+        name: v.flow_name,
+        parentFlowId: s?.parent_flow_id ?? null,
+        position: s?.flow_position ?? null,
+        frames: [],
+      };
+      byFlow.set(v.flow_id, g);
+    }
+    g.frames.push({
+      id: v.frame_id,
+      name: v.frame_name,
+      image: v.image_url,
+      position: s?.frame_position ?? frameOrderCounter++,
+    });
+  }
+
+  const flows = Array.from(byFlow.values())
+    .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity))
+    .map((g) => ({
+      id: g.id,
+      name: g.name,
+      parentFlowId: g.parentFlowId ?? undefined,
+      frames: g.frames
+        .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity))
+        .map((f) => ({ id: f.id, name: f.name, image: f.image })),
+    }));
+
+  return {
+    projectId: '',
+    buildSha: build?.sha ?? '',
+    capturedAt: build?.captured_at ?? new Date().toISOString(),
+    platform: (build?.platform as 'ios' | 'android' | 'web') ?? 'ios',
+    flows,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Version history

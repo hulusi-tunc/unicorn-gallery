@@ -11,6 +11,7 @@ import { findOrCreateFrame, listCommentsForFrame } from '@/lib/comments';
 import { imageHref } from '@/lib/image-href';
 import {
   getAppBySlug,
+  getBuildByVersion,
   getCurrentProfile,
   getLatestBuild,
   listFrameCaptures,
@@ -30,18 +31,30 @@ const SURFACE = 'bg-white dark:bg-[oklch(0.175_0.007_260)]';
 
 export default async function FramePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; flowId: string; frameId: string }>;
+  searchParams: Promise<{ v?: string }>;
 }): Promise<ReactNode> {
-  const { slug, flowId: rawFlow, frameId: rawFrame } = await params;
+  const [{ slug, flowId: rawFlow, frameId: rawFrame }, sp] = await Promise.all([
+    params,
+    searchParams,
+  ]);
   const flowId = decodeURIComponent(rawFlow);
   const frameId = decodeURIComponent(rawFrame);
 
   const app = await getAppBySlug(decodeURIComponent(slug));
   if (!app) notFound();
 
+  const versionParam = sp.v ? Number(sp.v) : null;
+  const selectedBuild =
+    versionParam != null && Number.isFinite(versionParam)
+      ? await getBuildByVersion(app.id, versionParam)
+      : null;
+  const isViewingOldVersion = selectedBuild !== null;
+
   const [manifest, build, profile, mentionables] = await Promise.all([
-    getManifestForApp(app.id),
+    getManifestForApp(app.id, selectedBuild?.id),
     getLatestBuild(app.id),
     getCurrentProfile(),
     getMentionableProfilesForApp(app.id),
@@ -56,8 +69,11 @@ export default async function FramePage({
 
   const prev = idx > 0 ? flow.frames[idx - 1] : undefined;
   const next = idx < flow.frames.length - 1 ? flow.frames[idx + 1] : undefined;
+  // Preserve `?v=N` across navigation so the user stays in the version
+  // they're browsing as they arrow through frames.
+  const versionQuery = isViewingOldVersion ? `?v=${selectedBuild!.version ?? ''}` : '';
   const frameHref = (id: string): string =>
-    `/app/${encodeURIComponent(app.slug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(id)}`;
+    `/app/${encodeURIComponent(app.slug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(id)}${versionQuery}`;
 
   const frameRow = await findOrCreateFrame(
     app.id,
@@ -124,6 +140,7 @@ export default async function FramePage({
           platform={manifest.platform}
           appSlug={app.slug}
           activeFrameId={frame.id}
+          versionQuery={versionQuery}
         />
       </div>
 
@@ -135,6 +152,7 @@ export default async function FramePage({
         appId={app.id}
         currentUserId={profile?.id ?? null}
         mentionables={mentionables}
+        readOnly={isViewingOldVersion}
       />
     </main>
   );

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { JourneyStrip } from '@/components/journey-strip';
 import {
   getAppBySlug,
+  getBuildByVersion,
   getCurrentProfile,
   getFreshFrameKeys,
   getManifestForApp,
@@ -14,16 +15,24 @@ export const dynamic = 'force-dynamic';
 
 export default async function FlowPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; flowId: string }>;
+  searchParams: Promise<{ v?: string }>;
 }): Promise<ReactNode> {
-  const { slug, flowId: rawFlow } = await params;
+  const [{ slug, flowId: rawFlow }, sp] = await Promise.all([params, searchParams]);
   const flowId = decodeURIComponent(rawFlow);
   const app = await getAppBySlug(decodeURIComponent(slug));
   if (!app) notFound();
 
+  const versionParam = sp.v ? Number(sp.v) : null;
+  const selectedBuild =
+    versionParam != null && Number.isFinite(versionParam)
+      ? await getBuildByVersion(app.id, versionParam)
+      : null;
+
   const profile = await getCurrentProfile();
-  const manifest = await getManifestForApp(app.id);
+  const manifest = await getManifestForApp(app.id, selectedBuild?.id);
   if (!manifest) notFound();
   const flow = manifest.flows.find((f) => f.id === flowId);
   if (!flow) notFound();
@@ -66,6 +75,7 @@ export default async function FlowPage({
           appSlug={app.slug}
           freshFrameKeys={freshFrameKeys}
           unresolvedByFrame={unresolvedByFrame}
+          versionQuery={selectedBuild ? `?v=${selectedBuild.version ?? ''}` : ''}
         />
       )}
     </main>

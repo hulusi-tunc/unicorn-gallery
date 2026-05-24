@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -35,6 +36,11 @@ import { editorialFonts, getNd } from '@/lib/tokens';
 import type { CommentWithAuthor } from '@/lib/comments';
 import type { MentionableProfile } from '@/lib/queries';
 
+const PANEL_WIDTH_KEY = 'comments-panel-width';
+const DEFAULT_PANEL_WIDTH = 320;
+const MIN_PANEL_WIDTH = 280;
+const MAX_PANEL_WIDTH = 640;
+
 export function CommentsPanel({
   frameRowId,
   comments,
@@ -43,6 +49,7 @@ export function CommentsPanel({
   appId,
   currentUserId,
   mentionables,
+  readOnly = false,
 }: {
   frameRowId: string;
   comments: CommentWithAuthor[];
@@ -52,6 +59,14 @@ export function CommentsPanel({
   /** Used for ownership checks (edit/delete on own comments). null when not signed in (won't happen on this route, but typing it kindly). */
   currentUserId: string | null;
   mentionables: MentionableProfile[];
+  /**
+   * When true, the new-comment composer is hidden. Set by frame pages when
+   * viewing a past version (`?v=N`) — new comments belong to the current
+   * version, not historical snapshots. Existing comments stay editable
+   * since they're anchored to the frame identity and the same DB row
+   * appears across every version where the frame existed.
+   */
+  readOnly?: boolean;
 }): ReactNode {
   const router = useRouter();
   const { theme } = useTheme();
@@ -62,6 +77,55 @@ export function CommentsPanel({
   const [focused, setFocused] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  // Resizable width, persisted in localStorage so it survives nav.
+  // Mirrors the FlowSidebar pattern — handle on the *left* edge here
+  // since the panel is anchored to the right of the page.
+  const [width, setWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const [resizing, setResizing] = useState(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(DEFAULT_PANEL_WIDTH);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PANEL_WIDTH_KEY);
+      if (stored) {
+        const n = Number(stored);
+        if (Number.isFinite(n) && n >= MIN_PANEL_WIDTH && n <= MAX_PANEL_WIDTH) {
+          setWidth(n);
+        }
+      }
+    } catch {
+      /* localStorage unavailable — keep default */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: PointerEvent): void => {
+      // Dragging left grows the panel — invert the delta.
+      const delta = startXRef.current - e.clientX;
+      const next = Math.min(
+        MAX_PANEL_WIDTH,
+        Math.max(MIN_PANEL_WIDTH, startWidthRef.current + delta),
+      );
+      setWidth(next);
+    };
+    const onUp = (): void => {
+      setResizing(false);
+      try {
+        localStorage.setItem(PANEL_WIDTH_KEY, String(width));
+      } catch {
+        /* persistence best-effort */
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [resizing, width]);
 
   const threads = useMemo(() => buildThreads(comments), [comments]);
   const visibleThreads = useMemo(
@@ -103,14 +167,47 @@ export function CommentsPanel({
     <aside
       style={{
         display: 'flex',
-        width: 320,
+        width,
         flexShrink: 0,
         flexDirection: 'column',
         borderLeft: `1px solid ${t.border}`,
         background: t.black,
         fontFamily: editorialFonts.body,
+        position: 'relative',
+        userSelect: resizing ? 'none' : undefined,
       }}
     >
+      {/* Resize handle — thin vertical strip on the LEFT edge of the panel.
+          Drag left to grow the panel, right to shrink. Width persists to
+          localStorage on pointerup. Mirrors the FlowSidebar pattern. */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize comments panel"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          startXRef.current = e.clientX;
+          startWidthRef.current = width;
+          setResizing(true);
+        }}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: -3,
+          width: 6,
+          height: '100%',
+          cursor: 'col-resize',
+          background: resizing ? t.accent : 'transparent',
+          transition: resizing ? undefined : 'background 120ms ease-out',
+          zIndex: 1,
+        }}
+        onMouseEnter={(e) => {
+          if (!resizing) e.currentTarget.style.background = t.border;
+        }}
+        onMouseLeave={(e) => {
+          if (!resizing) e.currentTarget.style.background = 'transparent';
+        }}
+      />
       <div
         style={{
           display: 'flex',
@@ -235,6 +332,20 @@ export function CommentsPanel({
         )}
       </div>
 
+      {readOnly ? (
+        <div
+          style={{
+            borderTop: `1px solid ${t.border}`,
+            padding: 12,
+            fontFamily: editorialFonts.body,
+            fontSize: 12,
+            color: t.textSecondary,
+            textAlign: 'center',
+          }}
+        >
+          Viewing a past version — switch to the latest to add new comments.
+        </div>
+      ) : (
       <form
         onSubmit={onSubmit}
         style={{ borderTop: `1px solid ${t.border}`, padding: 12 }}
@@ -318,6 +429,7 @@ export function CommentsPanel({
           </div>
         </div>
       </form>
+      )}
     </aside>
   );
 }
@@ -359,11 +471,18 @@ function CommentItem({
 
   const onToggleResolve = (): void => {
     startTransition(async () => {
-      await setCommentResolved({
+      const res = await setCommentResolved({
         commentId: comment.id,
         resolved: !resolved,
         appSlug,
       });
+      if (res.error) {
+        // Surface the failure instead of swallowing it — otherwise the UI
+        // looks like it worked, then "reappears" after refresh re-fetches
+        // the unchanged row.
+        alert(res.error);
+        return;
+      }
       router.refresh();
     });
   };

@@ -2,14 +2,16 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { AppHeader } from '@/components/header';
 import { FlowSidebar } from '@/components/flow-sidebar';
+import { VersionBanner } from '@/components/version-banner';
 import {
   getAppBySlug,
   getCurrentProfile,
-  getLatestBuild,
   getManifestForApp,
   getUnresolvedCommentsByFrame,
   listAgencyProfiles,
   listAppCustomers,
+  listBuildsForApp,
+  listEligibleCustomersForApp,
 } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -25,12 +27,25 @@ export default async function AppLayout({
   const app = await getAppBySlug(decodeURIComponent(slug));
   if (!app) notFound();
 
-  const [manifest, profile, agencyProfiles, latestBuild, customers] = await Promise.all([
-    getManifestForApp(app.id),
+  // Note: Next.js 15 doesn't pass searchParams to layouts. Pages handle
+  // their own `?v=N` filtering and pass it to children that need it
+  // (e.g. version banner is a Client Component reading useSearchParams).
+  // The sidebar always renders the LATEST flow tree to keep this layout
+  // simple; the page area below shows the correct version's content.
+  const [
+    profile,
+    agencyProfiles,
+    customers,
+    eligibleCustomers,
+    builds,
+    manifest,
+  ] = await Promise.all([
     getCurrentProfile(),
     listAgencyProfiles(),
-    getLatestBuild(app.id),
     listAppCustomers(app.id),
+    listEligibleCustomersForApp(app.id),
+    listBuildsForApp(app.id),
+    getManifestForApp(app.id),
   ]);
   // Any agency member can change Designer / PM. Customers see chips but no dropdown.
   const canEdit = profile?.role === 'agency';
@@ -72,10 +87,11 @@ export default async function AppLayout({
         manifest={manifest}
         agencyProfiles={agencyProfiles}
         canEdit={canEdit}
-        latestVersion={latestBuild?.version ?? null}
-        latestVersionAt={latestBuild?.created_at ?? null}
         customers={customers}
+        eligibleCustomers={eligibleCustomers}
+        builds={builds}
       />
+      <VersionBanner />
       <div className="flex flex-1 overflow-hidden">
         {manifest ? (
           <FlowSidebar manifest={manifest} appSlug={app.slug} unreadByFlow={unresolvedByFlow} />

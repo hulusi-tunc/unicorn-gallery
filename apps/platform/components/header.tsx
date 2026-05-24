@@ -16,9 +16,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { assignStaff } from '@/lib/actions/assign-staff';
 import { ArchiveAppButton } from '@/components/archive-app-button';
+import { DownloadPdfButton } from '@/components/download-pdf-button';
+import { EditProjectButton } from '@/components/edit-project-button';
 import { ShareButton } from '@/components/share-button';
+import { VersionSwitcher } from '@/components/version-switcher';
 import type { AppRowWithStaff, ProfileLite } from '@/lib/db';
-import type { AppCustomerWithProfile } from '@/lib/queries';
+import type { AppCustomerWithProfile, BuildSummary, EligibleCustomer } from '@/lib/queries';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
 const PLATFORM_LABEL: Record<AppRowWithStaff['platform'], string> = {
@@ -32,18 +35,18 @@ export function AppHeader({
   manifest: _manifest,
   agencyProfiles,
   canEdit,
-  latestVersion,
-  latestVersionAt,
   customers,
+  eligibleCustomers,
+  builds,
 }: {
   app: AppRowWithStaff;
   // Manifest used to be displayed (build SHA + capture date) — no longer shown.
   manifest: Manifest | null;
   agencyProfiles: ProfileLite[];
   canEdit: boolean;
-  latestVersion: number | null;
-  latestVersionAt: string | null;
   customers: AppCustomerWithProfile[];
+  eligibleCustomers: EligibleCustomer[];
+  builds: BuildSummary[];
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
@@ -85,33 +88,13 @@ export function AppHeader({
 
       <span style={{ width: 1, height: 16, background: t.border }} aria-hidden />
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 28,
-          height: 28,
-          borderRadius: 8,
-          background: accent,
-          color: 'white',
-          fontFamily: editorialFonts.display,
-          fontSize: 13,
-          fontWeight: 600,
-          flexShrink: 0,
-        }}
-      >
-        {app.icon_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={app.icon_url}
-            alt=""
-            style={{ width: '100%', height: '100%', borderRadius: 8, objectFit: 'cover' }}
-          />
-        ) : (
-          app.name.charAt(0).toUpperCase()
-        )}
-      </div>
+      <EditProjectButton
+        appSlug={app.slug}
+        appName={app.name}
+        iconUrl={app.icon_url}
+        accent={accent}
+        canEdit={canEdit}
+      />
 
       <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
         <span
@@ -170,43 +153,15 @@ export function AppHeader({
               appName={app.name}
               publicShareToken={app.public_share_token}
               customers={customers}
+              eligibleCustomers={eligibleCustomers}
             />
+            <DownloadPdfButton appSlug={app.slug} appName={app.name} builds={builds} />
             <ArchiveAppButton appSlug={app.slug} appName={app.name} />
           </>
         ) : null}
 
-        {latestVersion != null ? (
-          <Link
-            href={`/app/${encodeURIComponent(app.slug)}/history`}
-            title={
-              latestVersionAt
-                ? `Latest push ${new Date(latestVersionAt).toLocaleString()}`
-                : 'Version history'
-            }
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              height: 22,
-              padding: '0 10px',
-              borderRadius: 999,
-              border: `1px solid ${t.border}`,
-              background: t.surface,
-              fontFamily: editorialFonts.mono,
-              fontSize: 10,
-              letterSpacing: '0.04em',
-              color: t.textPrimary,
-              textDecoration: 'none',
-              transition: 'background 200ms ease-out, color 200ms ease-out',
-            }}
-          >
-            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-              v{latestVersion}
-            </span>
-            {latestVersionAt ? (
-              <span style={{ color: t.textSecondary }}>· {formatRelative(latestVersionAt)}</span>
-            ) : null}
-          </Link>
+        {builds.length > 0 ? (
+          <VersionSwitcher appSlug={app.slug} builds={builds} />
         ) : null}
 
         <span
@@ -230,18 +185,6 @@ export function AppHeader({
       </div>
     </header>
   );
-}
-
-function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diff = Math.max(0, Date.now() - then);
-  const m = Math.floor(diff / 60_000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
 }
 
 function StaffChip({

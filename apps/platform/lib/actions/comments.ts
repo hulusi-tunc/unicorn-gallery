@@ -149,15 +149,22 @@ export async function setCommentResolved(input: {
   }
 
   const supabase = await getSupabaseServerClient();
-  const { error } = await supabase
+  // .select() so we can tell the difference between "update succeeded" and
+  // "RLS filtered the row out and 0 rows changed" — the latter returns no
+  // error from Supabase but means the action effectively failed.
+  const { data, error } = await supabase
     .from('comments')
     .update(
       input.resolved
         ? { resolved_at: new Date().toISOString(), resolved_by: profile.id }
         : { resolved_at: null, resolved_by: null },
     )
-    .eq('id', input.commentId);
+    .eq('id', input.commentId)
+    .select('id');
   if (error) return { error: error.message };
+  if (!data || data.length === 0) {
+    return { error: 'Could not update this comment. It may have been deleted, or you may not have permission.' };
+  }
 
   revalidatePath(`/app/${input.appSlug}`);
   return { ok: true };
