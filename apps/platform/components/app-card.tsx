@@ -305,13 +305,20 @@ function PreviewArea({
     );
   }
 
-  // Web: borderless filled preview
+  // Web: 16:10 browser-viewport frame floats on the dot stage so a
+  // standard viewport snap fits without left/right cropping. Full-page
+  // snaps stay anchored to the top (cover + top center) so the hero
+  // section reads first.
   return (
     <div style={stageBg}>
       <div
         style={{
           position: 'absolute',
-          inset: 24,
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '88%',
+          aspectRatio: '16 / 10',
           borderRadius: 12,
           overflow: 'hidden',
           background: '#000',

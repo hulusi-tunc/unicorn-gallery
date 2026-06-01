@@ -120,9 +120,7 @@ function FilmstripCell({
           style={{ height: WEB_CELL_HEIGHT, width: WEB_CELL_WIDTH, position: 'relative' }}
           className={cn(
             'overflow-hidden rounded transition-all',
-            active
-              ? 'ring-2 ring-[oklch(0.5_0.22_254)]'
-              : 'ring-1 ring-neutral-200 group-hover:ring-neutral-400 dark:ring-neutral-800 dark:group-hover:ring-neutral-600',
+            active ? 'ring-2 ring-[oklch(0.5_0.22_254)]' : '',
           )}
         >
           <Image

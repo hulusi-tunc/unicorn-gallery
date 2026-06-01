@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { IPHONE_BEZEL_ASPECT, IPhoneBezel } from '@/components/iphone-bezel';
 import { UnresolvedBadge } from '@/components/unresolved-badge';
+import { WebCardThumb } from '@/components/web-card-thumb';
 import { imageHref } from '@/lib/image-href';
 import type { FrameUnresolvedSummary } from '@/lib/queries';
 
@@ -137,19 +138,12 @@ function JourneyCard({
             </IPhoneBezel>
           </div>
         ) : (
-          <div
-            style={{ height: WEB_CARD_HEIGHT, width: WEB_CARD_WIDTH, position: 'relative' }}
-            className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50 shadow-md transition-all group-hover:border-neutral-400 group-hover:shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:group-hover:border-neutral-600"
-          >
-            <Image
-              src={imageHref(frame.image)}
-              alt={frame.name}
-              fill
-              sizes="360px"
-              className="object-cover object-top"
-              loading="lazy"
-            />
-          </div>
+          <WebCardThumb
+            src={imageHref(frame.image)}
+            alt={frame.name}
+            width={WEB_CARD_WIDTH}
+            height={WEB_CARD_HEIGHT}
+          />
         )}
       </div>
 

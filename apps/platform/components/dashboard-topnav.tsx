@@ -2,9 +2,10 @@
 
 import { Bell, Moon, Search, Sun } from 'lucide-react';
 import Link from 'next/link';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import { UnicornLogo } from '@/components/brand/unicorn-logo';
+import { CommandPalette } from '@/components/command-palette';
 import { UserMenu } from '@/components/user-menu';
 import type { Profile } from '@/lib/db';
 import {
@@ -25,8 +26,21 @@ export function DashboardTopNav({
 }): ReactNode {
   const { theme, toggle } = useTheme();
   const t = getNd(theme);
-  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchHovered, setSearchHovered] = useState(false);
   const [logoHovered, setLogoHovered] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Global ⌘K / Ctrl+K opens the palette from anywhere in the dashboard.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const isCmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k';
+      if (!isCmdK) return;
+      e.preventDefault();
+      setPaletteOpen((v) => !v);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const navStyle: CSSProperties = {
     position: 'fixed',
@@ -49,12 +63,17 @@ export function DashboardTopNav({
     height: 36,
     borderRadius: swatchRadii.full,
     border: 'none',
-    background: searchFocused ? t.surface : t.surfaceInk,
+    background: searchHovered ? t.surface : t.surfaceInk,
     display: 'flex',
     alignItems: 'center',
     padding: '0 14px',
     gap: 8,
     transition: 'background 120ms ease-out',
+    cursor: 'pointer',
+    color: t.textSecondary,
+    fontFamily: editorialFonts.body,
+    fontSize: 13,
+    textAlign: 'left',
   };
 
   return (
@@ -100,28 +119,19 @@ export function DashboardTopNav({
           pointerEvents: 'auto',
         }}
       >
-        <div style={searchStyle}>
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          onMouseEnter={() => setSearchHovered(true)}
+          onMouseLeave={() => setSearchHovered(false)}
+          aria-label="Search apps and frames"
+          aria-haspopup="dialog"
+          style={searchStyle}
+        >
           <span style={{ color: t.textSecondary, display: 'inline-flex' }}>
             <Search size={14} />
           </span>
-          <input
-            type="text"
-            placeholder="Search apps, frames…"
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            disabled
-            style={{
-              flex: 1,
-              border: 'none',
-              outline: 'none',
-              background: 'transparent',
-              color: t.textPrimary,
-              fontFamily: editorialFonts.body,
-              fontSize: 13,
-              minWidth: 0,
-            }}
-            aria-label="Search apps and frames"
-          />
+          <span style={{ flex: 1, color: t.textSecondary }}>Search apps, frames…</span>
           <span
             style={{
               fontFamily: editorialFonts.mono,
@@ -134,7 +144,7 @@ export function DashboardTopNav({
           >
             ⌘K
           </span>
-        </div>
+        </button>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
@@ -199,6 +209,7 @@ export function DashboardTopNav({
         </IconButton>
         <UserMenu profile={profile} />
       </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </nav>
   );
 }

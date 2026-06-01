@@ -11,6 +11,7 @@ import {
   moveTo,
   popGraphicsState,
   pushGraphicsState,
+  rectangle,
   rgb,
   type PDFFont,
   type PDFImage,
@@ -87,7 +88,9 @@ export async function GET(
   const flowGroups: FlowGroup[] = manifest
     ? manifest.flows
         .map((flow) => ({
+          id: flow.id,
           name: flow.name,
+          parentFlowId: flow.parentFlowId,
           frames: flow.frames.map((frame) => ({
             name: frame.name,
             imageUrl: frame.image,
@@ -224,7 +227,9 @@ interface FrameEntry {
 }
 
 interface FlowGroup {
+  id: string;
   name: string;
+  parentFlowId?: string;
   frames: FrameEntry[];
 }
 
@@ -251,6 +256,16 @@ function computeGrid(platform: Platform): GridSpec {
   return { cols, rows, cellW, cellH, gridTop, perPage: cols * rows };
 }
 
+// Aspect ratio above which we treat a web snap as a full-page capture and
+// give it dedicated pages (multi-page if the scroll is very long). Below
+// this threshold it stays in the standard grid.
+const FULL_PAGE_ASPECT = 1.4;
+
+type SlotItem = { frame: FrameEntry; image: FetchedImage; embedded: PDFImage | null };
+type Slot =
+  | { kind: 'grid'; items: SlotItem[] }
+  | { kind: 'fullpage'; item: SlotItem };
+
 async function drawFlows(
   pdf: PDFDocument,
   font: PDFFont,
@@ -264,49 +279,183 @@ async function drawFlows(
 ): Promise<void> {
   const grid = computeGrid(platform);
 
-  // Precompute total pages so the header can show "Page X of Y" across the
-  // whole document, not just within a flow.
+  // Pre-embed every image and classify by aspect so we know how many PDF
+  // pages each flow will need before drawing the first one. This lets the
+  // running page counter ("X of Y") stay accurate even when some frames
+  // get their own multi-page render.
+  const planByFlow: Array<{ flow: FlowGroup; slots: Slot[]; totalPages: number }> = [];
   let totalPages = 0;
-  for (const f of flows) totalPages += Math.ceil(f.frames.length / grid.perPage);
-
-  let pageNum = 0;
   let imageOffset = 0;
   for (const flow of flows) {
     const flowImages = images.slice(imageOffset, imageOffset + flow.frames.length);
     imageOffset += flow.frames.length;
-    const flowPages = Math.ceil(flow.frames.length / grid.perPage);
-
-    for (let p = 0; p < flowPages; p++) {
-      pageNum++;
-      const page = pdf.addPage([PAGE_W, PAGE_H]);
-      drawHeader(page, font, boldFont, projectName, versionLabel, pageNum, totalPages);
-      drawFlowBand(page, font, boldFont, flow.name, flow.frames.length, p, flowPages);
-
-      for (let cell = 0; cell < grid.perPage; cell++) {
-        const idx = p * grid.perPage + cell;
-        if (idx >= flow.frames.length) break;
-
-        const col = cell % grid.cols;
-        const row = Math.floor(cell / grid.cols);
-        const x = MARGIN + col * (grid.cellW + CELL_GUTTER);
-        const y = grid.gridTop - row * (grid.cellH + CELL_GUTTER) - grid.cellH;
-
-        await drawCell(
-          pdf,
-          page,
-          font,
-          boldFont,
-          platform,
-          bezel,
-          flow.frames[cell + p * grid.perPage]!,
-          flowImages[idx]!,
-          x,
-          y,
-          grid.cellW,
-          grid.cellH,
-        );
+    const slots: Slot[] = [];
+    let currentGrid: SlotItem[] = [];
+    for (let i = 0; i < flow.frames.length; i++) {
+      const frame = flow.frames[i]!;
+      const image = flowImages[i]!;
+      const embedded = await tryEmbed(pdf, image);
+      const isFullPage =
+        platform === 'web' &&
+        embedded != null &&
+        embedded.height / embedded.width >= FULL_PAGE_ASPECT;
+      const item: SlotItem = { frame, image, embedded };
+      if (isFullPage) {
+        if (currentGrid.length > 0) {
+          slots.push({ kind: 'grid', items: currentGrid });
+          currentGrid = [];
+        }
+        slots.push({ kind: 'fullpage', item });
+      } else {
+        currentGrid.push(item);
+        if (currentGrid.length >= grid.perPage) {
+          slots.push({ kind: 'grid', items: currentGrid });
+          currentGrid = [];
+        }
       }
     }
+    if (currentGrid.length > 0) slots.push({ kind: 'grid', items: currentGrid });
+
+    // Count pages for the running total.
+    let flowPages = 0;
+    for (const slot of slots) {
+      if (slot.kind === 'grid') {
+        flowPages += 1;
+      } else {
+        flowPages += countFullPagePages(slot.item.embedded);
+      }
+    }
+    planByFlow.push({ flow, slots, totalPages: flowPages });
+    totalPages += flowPages;
+  }
+
+  // Pre-build a breadcrumb path for each flow so the band reads
+  // "Parent › Child" instead of just the leaf name. Cycles are guarded
+  // by depth-cap; missing parents fall back to the local name.
+  const flowsById = new Map(flows.map((f) => [f.id, f]));
+  const flowPathById = new Map<string, string>();
+  for (const f of flows) {
+    const chain: string[] = [];
+    let cursor: FlowGroup | undefined = f;
+    let depth = 0;
+    while (cursor && depth < 8) {
+      chain.unshift(cursor.name);
+      cursor = cursor.parentFlowId ? flowsById.get(cursor.parentFlowId) : undefined;
+      depth += 1;
+    }
+    flowPathById.set(f.id, chain.join(' › '));
+  }
+
+  let pageNum = 0;
+  for (const planned of planByFlow) {
+    const { flow, slots, totalPages: flowPages } = planned;
+    const flowPath = flowPathById.get(flow.id) ?? flow.name;
+    let pInFlow = 0;
+    for (const slot of slots) {
+      if (slot.kind === 'grid') {
+        pageNum++;
+        pInFlow++;
+        const page = pdf.addPage([PAGE_W, PAGE_H]);
+        drawHeader(page, font, boldFont, projectName, versionLabel, pageNum, totalPages);
+        drawFlowBand(page, font, boldFont, flowPath, flow.frames.length, pInFlow - 1, flowPages);
+        for (let cell = 0; cell < slot.items.length; cell++) {
+          const item = slot.items[cell]!;
+          const col = cell % grid.cols;
+          const row = Math.floor(cell / grid.cols);
+          const x = MARGIN + col * (grid.cellW + CELL_GUTTER);
+          const y = grid.gridTop - row * (grid.cellH + CELL_GUTTER) - grid.cellH;
+          await drawCell(
+            pdf, page, font, boldFont, platform, bezel,
+            item.frame, item.image, x, y, grid.cellW, grid.cellH,
+            item.embedded,
+          );
+        }
+      } else {
+        const used = await drawFullPageSnap(
+          pdf, font, boldFont, projectName, versionLabel,
+          flowPath, flow.frames.length, slot.item,
+          pageNum, totalPages, pInFlow, flowPages,
+        );
+        pageNum += used;
+        pInFlow += used;
+      }
+    }
+  }
+}
+
+function countFullPagePages(_embedded: PDFImage | null): number {
+  // Always one page per snap, even when the snap is a tall full-page
+  // capture. User preference: fit-to-page, never paginate a single snap.
+  return 1;
+}
+
+async function drawFullPageSnap(
+  pdf: PDFDocument,
+  font: PDFFont,
+  boldFont: PDFFont,
+  projectName: string,
+  versionLabel: string,
+  flowName: string,
+  flowFrameCount: number,
+  item: SlotItem,
+  pageNumBase: number,
+  totalPages: number,
+  pInFlowStart: number,
+  flowPages: number,
+): Promise<number> {
+  const usableW = PAGE_W - MARGIN * 2;
+  const usableTop =
+    PAGE_H - MARGIN - HEADER_H - HEADER_GAP - FLOW_BAND_H - FLOW_BAND_GAP;
+  const usableBottom = MARGIN + CAPTION_H + CAPTION_GAP;
+  const usableH = usableTop - usableBottom;
+
+  const page = pdf.addPage([PAGE_W, PAGE_H]);
+  drawHeader(page, font, boldFont, projectName, versionLabel, pageNumBase + 1, totalPages);
+  drawFlowBand(page, font, boldFont, flowName, flowFrameCount, pInFlowStart, flowPages);
+
+  if (!item.embedded) {
+    drawPlaceholderLabel(page, font, placeholderText(item.image), MARGIN, usableBottom, usableW, usableH);
+    drawCaption(page, font, boldFont, item.frame.name, MARGIN, MARGIN, usableW);
+    return 1;
+  }
+
+  // Single-page render. Always fit the WHOLE image inside the usable area —
+  // for tall full-page snaps that means the image gets significantly scaled
+  // down, but the user explicitly preferred "one snap per page" over multi-
+  // page chopping. Keep horizontal-center so a viewport-aspect snap doesn't
+  // glue to the left edge.
+  const fit = fitContain(item.embedded.width, item.embedded.height, usableW, usableH);
+  const imgX = MARGIN + (usableW - fit.w) / 2;
+  const imgY = usableBottom + (usableH - fit.h) / 2;
+  drawDropShadow(page, imgX, imgY, fit.w, fit.h);
+  page.drawImage(item.embedded, { x: imgX, y: imgY, width: fit.w, height: fit.h });
+
+  drawCaption(page, font, boldFont, item.frame.name, MARGIN, MARGIN, usableW);
+
+  return 1;
+}
+
+const SHADOW_LAYERS: Array<{ off: number; alpha: number }> = [
+  { off: 1, alpha: 0.18 },
+  { off: 3, alpha: 0.10 },
+  { off: 6, alpha: 0.06 },
+];
+
+/**
+ * Soft drop shadow under a screenshot — pdf-lib doesn't have CSS-style
+ * filters, so we stack three slightly-offset gray rectangles with
+ * decreasing alpha. Cheap, looks decent in any PDF reader.
+ */
+function drawDropShadow(page: PDFPage, x: number, y: number, w: number, h: number): void {
+  for (const layer of SHADOW_LAYERS) {
+    page.drawRectangle({
+      x: x + layer.off * 0.4,
+      y: y - layer.off,
+      width: w,
+      height: h,
+      color: rgb(0, 0, 0),
+      opacity: layer.alpha,
+    });
   }
 }
 
@@ -323,14 +472,15 @@ async function drawCell(
   y: number,
   w: number,
   h: number,
+  preembedded?: PDFImage | null,
 ): Promise<void> {
   const imageH = h - CAPTION_H - CAPTION_GAP;
   const imageY = y + CAPTION_H + CAPTION_GAP;
 
   if (platform === 'web' || !bezel) {
-    drawWebCard(pdf, page, font, image, x, imageY, w, imageH);
+    await drawWebCard(pdf, page, font, image, x, imageY, w, imageH, preembedded);
   } else {
-    await drawBezeledCell(pdf, page, font, bezel, image, x, imageY, w, imageH);
+    await drawBezeledCell(pdf, page, font, bezel, image, x, imageY, w, imageH, preembedded);
   }
 
   drawCaption(page, font, boldFont, frame.name, x, y, w);
@@ -350,27 +500,29 @@ async function drawWebCard(
   y: number,
   w: number,
   h: number,
+  preembedded?: PDFImage | null,
 ): Promise<void> {
-  page.drawRectangle({
-    x,
-    y,
-    width: w,
-    height: h,
-    color: SCREEN_BG,
-    borderColor: BORDER,
-    borderWidth: 0.5,
-  });
-
-  const embedded = await tryEmbed(pdf, image);
+  const embedded = preembedded ?? (await tryEmbed(pdf, image));
   if (embedded) {
-    const fit = fitContain(embedded.width, embedded.height, w, h);
+    // Width-fit and top-align so a viewport snap (1440x900 ≈ 1.6) fills the
+    // cell cleanly without center-letterboxing top/bottom. If the image is
+    // taller than the cell, clip the bottom rather than shrink it height-
+    // first — the user can see the rest in the lightbox / full-page page.
+    const scaleByWidth = w / embedded.width;
+    const drawnW = w;
+    const drawnH = embedded.height * scaleByWidth;
+    const visibleH = Math.min(drawnH, h);
+    drawDropShadow(page, x, y + h - visibleH, drawnW, visibleH);
+    page.pushOperators(pushGraphicsState(), rectangle(x, y, w, h), clip(), endPath());
     page.drawImage(embedded, {
-      x: x + (w - fit.w) / 2,
-      y: y + (h - fit.h) / 2,
-      width: fit.w,
-      height: fit.h,
+      x,
+      y: y + h - drawnH,
+      width: drawnW,
+      height: drawnH,
     });
+    page.pushOperators(popGraphicsState());
   } else {
+    page.drawRectangle({ x, y, width: w, height: h, color: SCREEN_BG });
     drawPlaceholderLabel(page, font, placeholderText(image), x, y, w, h);
   }
 }
@@ -391,6 +543,7 @@ async function drawBezeledCell(
   y: number,
   w: number,
   h: number,
+  preembedded?: PDFImage | null,
 ): Promise<void> {
   // Fit a bezel-aspect box inside the cell.
   const cellRatio = w / h;
@@ -429,7 +582,7 @@ async function drawBezeledCell(
     color: SCREEN_BG,
   });
 
-  const embedded = await tryEmbed(pdf, image);
+  const embedded = preembedded ?? (await tryEmbed(pdf, image));
   if (embedded) {
     const fit = fitContain(embedded.width, embedded.height, screenW, screenH);
     page.drawImage(embedded, {

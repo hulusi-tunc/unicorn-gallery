@@ -92,7 +92,10 @@ export async function addTeammate(input: {
     .upsert({ email, role: 'agency' }, { onConflict: 'email' });
   if (pendErr) return { error: pendErr.message };
 
-  // 2. Look up or create auth user.
+  // 2. Look up or invite auth user. inviteUserByEmail (not createUser!)
+  // is what sends Supabase's built-in invite email — createUser with
+  // email_confirm:true just marks the address verified and never emails
+  // anyone, which is why "Add Unicorn" wasn't reaching teammates.
   const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
   const existing = list?.users.find((u) => u.email === email);
 
@@ -100,13 +103,16 @@ export async function addTeammate(input: {
   if (existing) {
     userId = existing.id;
   } else {
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      email_confirm: true,
-      user_metadata: { name: input.name },
-    });
-    if (createErr) return { error: createErr.message };
-    userId = created.user!.id;
+    const siteUrl =
+      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ??
+      'https://unicorn-studio-gallery.vercel.app';
+    const { data: invited, error: inviteErr } =
+      await admin.auth.admin.inviteUserByEmail(email, {
+        data: input.name ? { name: input.name } : undefined,
+        redirectTo: `${siteUrl}/login`,
+      });
+    if (inviteErr) return { error: inviteErr.message };
+    userId = invited.user!.id;
   }
 
   // 3. Update profile to set role/flavor/name.

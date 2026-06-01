@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { ManifestFlow, ManifestFrame, Platform } from '@unicorn-studio/gallery-capture';
 import { IPHONE_BEZEL_RATIO, IPhoneBezel } from '@/components/iphone-bezel';
+import { WebCardThumb } from '@/components/web-card-thumb';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { imageHref } from '@/lib/image-href';
 import type {
@@ -306,24 +307,18 @@ function ReadonlyCard({
   }
 
   return (
-    <div className="flex shrink-0 flex-col items-start gap-2">
+    <div className="group flex shrink-0 flex-col items-start gap-2">
       <span className="font-mono text-[10px] tracking-[0.08em] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
         {String(step).padStart(2, '0')}
       </span>
-      <div
-        className="overflow-hidden rounded-lg border border-[oklch(0.9_0.007_260)] bg-white shadow-sm dark:border-[oklch(0.24_0.008_260)] dark:bg-[oklch(0.18_0.008_260)]"
-        style={{ width: WEB_CARD_WIDTH, height: WEB_CARD_HEIGHT }}
-      >
-        {src ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={src}
-            alt={frame.name}
-            className="h-full w-full object-cover"
-            draggable={false}
-          />
-        ) : null}
-      </div>
+      {src ? (
+        <WebCardThumb src={src} alt={frame.name} width={WEB_CARD_WIDTH} height={WEB_CARD_HEIGHT} />
+      ) : (
+        <div
+          className="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-[oklch(0.18_0.008_260)]"
+          style={{ width: WEB_CARD_WIDTH, height: WEB_CARD_HEIGHT }}
+        />
+      )}
     </div>
   );
 }

@@ -970,3 +970,121 @@ export async function listBuildsForApp(appId: string): Promise<BuildSummary[]> {
     };
   });
 }
+
+export interface SearchAppHit {
+  id: string;
+  slug: string;
+  name: string;
+  tagline: string | null;
+  icon_url: string | null;
+  accent_color: string | null;
+}
+
+export interface SearchFrameHit {
+  id: string;
+  flow_id: string;
+  frame_id: string;
+  flow_name: string;
+  frame_name: string;
+  latest_image_url: string | null;
+  app_slug: string;
+  app_name: string;
+}
+
+export interface SearchResults {
+  apps: SearchAppHit[];
+  frames: SearchFrameHit[];
+}
+
+// PostgREST `ilike` treats % and _ as wildcards and \ as escape. Quote them
+// so a user typing "100%" doesn't accidentally match everything.
+function escapeIlikePattern(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+export async function searchAppsAndFrames(
+  q: string,
+  limit = 6,
+): Promise<SearchResults> {
+  const trimmed = q.trim();
+  if (!trimmed) return { apps: [], frames: [] };
+  const supabase = await getSupabaseServerClient();
+  const like = `%${escapeIlikePattern(trimmed)}%`;
+
+  // Per-column ilike queries avoid PostgREST `.or()` parsing of commas /
+  // parens in user input. RLS scopes both queries to what the user can see.
+  const [appsName, appsTagline, framesFrame, framesFlow] = await Promise.all([
+    supabase
+      .from('apps')
+      .select('id, slug, name, tagline, icon_url, accent_color')
+      .is('archived_at', null)
+      .ilike('name', like)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('apps')
+      .select('id, slug, name, tagline, icon_url, accent_color')
+      .is('archived_at', null)
+      .ilike('tagline', like)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('frames')
+      .select(
+        'id, frame_id, flow_id, frame_name, flow_name, latest_image_url, created_at, app:apps!inner(slug, name, archived_at)',
+      )
+      .is('app.archived_at', null)
+      .ilike('frame_name', like)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('frames')
+      .select(
+        'id, frame_id, flow_id, frame_name, flow_name, latest_image_url, created_at, app:apps!inner(slug, name, archived_at)',
+      )
+      .is('app.archived_at', null)
+      .ilike('flow_name', like)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  ]);
+
+  for (const r of [appsName, appsTagline, framesFrame, framesFlow]) {
+    if (r.error) throw r.error;
+  }
+
+  const appsById = new Map<string, SearchAppHit>();
+  for (const row of [...(appsName.data ?? []), ...(appsTagline.data ?? [])] as SearchAppHit[]) {
+    if (!appsById.has(row.id)) appsById.set(row.id, row);
+  }
+
+  type RawFrame = {
+    id: string;
+    frame_id: string;
+    flow_id: string;
+    frame_name: string;
+    flow_name: string;
+    latest_image_url: string | null;
+    app: { slug: string; name: string } | { slug: string; name: string }[];
+  };
+  const framesById = new Map<string, SearchFrameHit>();
+  for (const row of [...(framesFrame.data ?? []), ...(framesFlow.data ?? [])] as RawFrame[]) {
+    if (framesById.has(row.id)) continue;
+    const app = Array.isArray(row.app) ? row.app[0] : row.app;
+    if (!app) continue;
+    framesById.set(row.id, {
+      id: row.id,
+      flow_id: row.flow_id,
+      frame_id: row.frame_id,
+      flow_name: row.flow_name,
+      frame_name: row.frame_name,
+      latest_image_url: row.latest_image_url,
+      app_slug: app.slug,
+      app_name: app.name,
+    });
+  }
+
+  return {
+    apps: Array.from(appsById.values()).slice(0, limit),
+    frames: Array.from(framesById.values()).slice(0, limit),
+  };
+}

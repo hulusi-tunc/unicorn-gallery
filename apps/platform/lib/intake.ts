@@ -72,7 +72,7 @@ export async function ingestCapture({
   appSlug: string;
   manifest: ManifestSnapshot;
   /** Map from manifest image path → PNG bytes */
-  screenshots: Map<string, ArrayBuffer>;
+  screenshots: Map<string, { bytes: ArrayBuffer; mimeType: string }>;
   replace?: boolean;
 }): Promise<IntakeResult | IntakeError> {
   const admin = getSupabaseAdminClient();
@@ -92,21 +92,31 @@ export async function ingestCapture({
   let uploaded = 0;
   // Collected per-frame URLs returned to the caller so Capture can populate
   // `remoteImageUrl` on each snap and safely evict its local PNG cache.
+  // Choose the storage file extension from the per-part mimeType so WebP
+  // recodes from the new Capture client land as `.webp` (and serve with
+  // the right Content-Type). PNG remains the default for older clients.
+  const extForMime = (mime: string): string =>
+    mime === 'image/webp' ? 'webp' : mime === 'image/jpeg' ? 'jpg' : 'png';
+
   const frameUrls: Array<{ frameId: string; url: string }> = [];
   for (const flow of manifest.flows) {
     const newFrames: typeof flow.frames = [];
     for (const frame of flow.frames) {
-      const bytes = screenshots.get(frame.image);
-      if (!bytes) {
+      const screenshot = screenshots.get(frame.image);
+      if (!screenshot) {
         return {
           status: 400,
           message: `Manifest references "${frame.image}" but no screenshot for that path was uploaded.`,
         };
       }
-      const storagePath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}.png`;
+      const ext = extForMime(screenshot.mimeType);
+      const storagePath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}.${ext}`;
       const { error: upErr } = await admin.storage
         .from(SCREENSHOTS_BUCKET)
-        .upload(storagePath, bytes, { contentType: 'image/png', upsert: true });
+        .upload(storagePath, screenshot.bytes, {
+          contentType: screenshot.mimeType,
+          upsert: true,
+        });
       if (upErr) return { status: 500, message: `Storage upload failed: ${upErr.message}` };
       const { data: pub } = admin.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(storagePath);
       frameUrls.push({ frameId: frame.id, url: pub.publicUrl });
@@ -118,12 +128,16 @@ export async function ingestCapture({
       const inputVersions = frame.versions ?? [];
       for (let vi = 0; vi < inputVersions.length; vi++) {
         const v = inputVersions[vi]!;
-        const vBytes = screenshots.get(v.image);
-        if (!vBytes) continue;
-        const vPath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}-v${vi + 1}.png`;
+        const vScreenshot = screenshots.get(v.image);
+        if (!vScreenshot) continue;
+        const vExt = extForMime(vScreenshot.mimeType);
+        const vPath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}-v${vi + 1}.${vExt}`;
         const { error: vErr } = await admin.storage
           .from(SCREENSHOTS_BUCKET)
-          .upload(vPath, vBytes, { contentType: 'image/png', upsert: true });
+          .upload(vPath, vScreenshot.bytes, {
+            contentType: vScreenshot.mimeType,
+            upsert: true,
+          });
         if (vErr) {
           // Don't fail the whole push for a version upload error — log it
           // by skipping the entry. The latest image still made it.
@@ -266,6 +280,48 @@ export async function ingestCapture({
   // The flow's index in `newFlows` is the display order; same for frames.
   // If the manifest carries explicit positions we use those, otherwise we
   // fall back to the array index so older clients still get sane ordering.
+  // Cleanup pass for move-flow: the frames table is keyed by
+  // (app_id, flow_id, frame_id). If the user dragged a snap from flow A to
+  // flow B in Capture, the incoming manifest carries it under B but the
+  // old A-row still exists from a previous push — so the gallery ends up
+  // showing the same snap in both flows. For every frame_id in this batch,
+  // delete rows in the same app whose flow_id doesn't match the incoming
+  // assignment. Scoped to the frame_ids in this batch so we never touch
+  // frames that just happen not to be in the current upload chunk.
+  const incomingFrameIds = new Set<string>();
+  const incomingPairs = new Set<string>();
+  for (const flow of newFlows) {
+    for (const frame of flow.frames) {
+      incomingFrameIds.add(frame.id);
+      incomingPairs.add(`${flow.id}::${frame.id}`);
+    }
+  }
+  if (incomingFrameIds.size > 0) {
+    const { data: existing } = await admin
+      .from('frames')
+      .select('id, flow_id, frame_id')
+      .eq('app_id', appId)
+      .in('frame_id', Array.from(incomingFrameIds));
+    const staleIds: string[] = [];
+    for (const row of existing ?? []) {
+      if (!incomingPairs.has(`${row.flow_id}::${row.frame_id}`)) {
+        staleIds.push(row.id);
+      }
+    }
+    if (staleIds.length > 0) {
+      const { error: delErr } = await admin
+        .from('frames')
+        .delete()
+        .in('id', staleIds);
+      if (delErr) {
+        return {
+          status: 500,
+          message: `Stale frame cleanup failed: ${delErr.message}`,
+        };
+      }
+    }
+  }
+
   const upsertedFrameIds: string[] = [];
   for (let fi = 0; fi < newFlows.length; fi++) {
     const flow = newFlows[fi];

@@ -12,14 +12,18 @@ export function DeviceFrame({
   alt: string;
 }): ReactNode {
   if (platform === 'web') {
+    // Full-page snaps can be 8000+ px tall — fit-to-height collapses them
+    // into an unreadable matchstick. Fit-to-width with a vertical scroll
+    // shows the page at a readable scale and lets the user scroll like
+    // they would in the real browser. Container caps both axes so a
+    // viewport-only (1440×900) snap stays in-view without scrolling.
     return (
       <div
         style={{
-          overflow: 'hidden',
-          borderRadius: 12,
-          border: '1px solid rgba(120,120,140,0.2)',
-          background: '#000',
-          boxShadow: '0 30px 80px -20px rgba(0,0,0,0.6)',
+          maxHeight: 'min(86vh, calc(100vh - 280px))',
+          maxWidth: '100%',
+          overflowY: 'auto',
+          overflowX: 'hidden',
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -28,9 +32,7 @@ export function DeviceFrame({
           alt={alt}
           style={{
             display: 'block',
-            maxHeight: '72vh',
-            maxWidth: '100%',
-            width: 'auto',
+            width: 'min(1200px, 100%)',
             height: 'auto',
           }}
         />

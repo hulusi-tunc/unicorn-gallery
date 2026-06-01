@@ -6,9 +6,17 @@ import type { ManifestSnapshot } from '@/lib/db';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+interface ParsedScreenshot {
+  bytes: ArrayBuffer;
+  /** mimeType the client labeled the multipart part with — propagated
+   * to the Supabase upload so .webp recodes land with the right
+   * content-type + file extension. */
+  mimeType: string;
+}
+
 interface ParsedBody {
   manifestText: string;
-  screenshots: Map<string, ArrayBuffer>;
+  screenshots: Map<string, ParsedScreenshot>;
 }
 
 /**
@@ -29,11 +37,15 @@ async function parseMultipart(request: NextRequest): Promise<ParsedBody> {
   });
 
   let manifestText = '';
-  const screenshots = new Map<string, ArrayBuffer>();
+  const screenshots = new Map<string, ParsedScreenshot>();
 
   const done = new Promise<void>((resolve, reject) => {
-    bb.on('file', (name, fileStream) => {
+    bb.on('file', (name, fileStream, info) => {
       const chunks: Buffer[] = [];
+      // busboy normalises the part's Content-Type into `info.mimeType`.
+      // Default to image/png since older Capture clients didn't send a
+      // per-part type (and PNG is what they always sent).
+      const mimeType = info?.mimeType ?? 'image/png';
       fileStream.on('data', (chunk: Buffer) => chunks.push(chunk));
       fileStream.on('end', () => {
         const buf = Buffer.concat(chunks);
@@ -43,7 +55,7 @@ async function parseMultipart(request: NextRequest): Promise<ParsedBody> {
           // copy into a fresh ArrayBuffer detached from Node's buffer pool
           const ab = new ArrayBuffer(buf.length);
           new Uint8Array(ab).set(buf);
-          screenshots.set(name, ab);
+          screenshots.set(name, { bytes: ab, mimeType });
         }
       });
       fileStream.on('error', reject);
