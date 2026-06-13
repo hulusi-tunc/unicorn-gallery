@@ -86,6 +86,22 @@ code {
   scrollbar-width: thin;
 }
 
+/* Definition of Ready tool — keyboard focus ring + reduced-motion guard,
+   scoped to `.dor-root` so the rest of the app is untouched. */
+.dor-focus:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px oklch(0.6 0.21 254 / 0.4);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dor-root *,
+  .dor-root *::before,
+  .dor-root *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 /* Bezel screen scrollbar — subtle so it doesn't clash with the device frame.
    Used by the frame detail page's full-page captures. */
 .iphone-bezel-screen-scroll {

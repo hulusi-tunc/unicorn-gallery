@@ -534,3 +534,41 @@ do $$ begin
     execute 'alter publication supabase_realtime add table public.notifications';
   end if;
 end $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- dor_assessments — Definition of Ready self-checks. Designers score the PM
+-- handoff against weighted criteria before starting design. The team sees the
+-- full history. `score` + `verdict` are recomputed server-side on every write
+-- (see lib/dor/criteria.ts) — the client value is never trusted.
+--
+-- app_id optionally ties an assessment to a real gallery project; it's nullable
+-- so a check can run before the project is onboarded. project_name is kept
+-- denormalized so history reads don't have to join (and survives app deletion).
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.dor_assessments (
+  id uuid primary key default gen_random_uuid(),
+  app_id uuid references public.apps(id) on delete set null,
+  project_name text not null check (length(project_name) > 0 and length(project_name) < 200),
+  designer_id uuid references public.profiles(id) on delete set null,
+  designer_name text not null check (length(designer_name) > 0 and length(designer_name) < 120),
+  track text not null check (track in ('ai', 'figma')),
+  -- { [criterionId]: 0 | 0.5 | 1 } — the raw ticks the score is derived from.
+  scores jsonb not null default '{}'::jsonb,
+  -- Normalized 0–10, server-computed. Never trust the client's number.
+  score real not null check (score >= 0 and score <= 10),
+  verdict text not null check (verdict in ('cleared', 'almost', 'not_ready')),
+  -- ETA stays null until the assessment clears (enforced server-side).
+  eta_days real check (eta_days is null or eta_days >= 0),
+  eta_date timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists dor_assessments_created_idx on public.dor_assessments(created_at desc);
+create index if not exists dor_assessments_app_idx on public.dor_assessments(app_id);
+
+-- Agency-only: the whole tool is an internal team activity. Customers never
+-- see readiness checks. "Team sees everything" = any agency member reads all
+-- rows; the same gate covers insert/update.
+alter table public.dor_assessments enable row level security;
+drop policy if exists dor_assessments_agency_all on public.dor_assessments;
+create policy dor_assessments_agency_all on public.dor_assessments for all
+  using (public.is_agency()) with check (public.is_agency());

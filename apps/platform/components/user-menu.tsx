@@ -1,6 +1,6 @@
 'use client';
 
-import { Archive, LogOut, Settings, Shield, User as UserIcon } from 'lucide-react';
+import { Archive, ClipboardCheck, LogOut, Settings, Shield, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -114,6 +114,12 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
               <Link href="/admin">
                 <Shield size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
                 Team & access
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dor">
+                <ClipboardCheck size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
+                Readiness (DoR)
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>

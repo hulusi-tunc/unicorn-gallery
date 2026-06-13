@@ -5,6 +5,7 @@ import type {
   AppRow,
   AppRowWithStaff,
   Build,
+  DorAssessment,
   Frame,
   ManifestSnapshot,
   Profile,
@@ -1087,4 +1088,26 @@ export async function searchAppsAndFrames(
     apps: Array.from(appsById.values()).slice(0, limit),
     frames: Array.from(framesById.values()).slice(0, limit),
   };
+}
+
+/**
+ * Team-wide Definition of Ready history, newest first. RLS limits this to
+ * agency members (the policy blocks customers entirely), so every agency
+ * user sees the full list. Pass `project` to filter by exact project name —
+ * mirrors the GET /api/dor `?project=` contract.
+ */
+export async function listDorAssessments(options?: {
+  project?: string;
+  limit?: number;
+}): Promise<DorAssessment[]> {
+  const supabase = await getSupabaseServerClient();
+  let query = supabase
+    .from('dor_assessments')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(options?.limit ?? 100);
+  if (options?.project) query = query.eq('project_name', options.project);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []) as DorAssessment[];
 }

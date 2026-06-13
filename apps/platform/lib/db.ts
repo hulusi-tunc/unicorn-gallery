@@ -153,6 +153,27 @@ export interface FrameRead {
   last_read_at: string;
 }
 
+/** A Definition of Ready self-check. `scores` holds raw 0/0.5/1 ticks keyed by
+ *  criterion id (see lib/dor/criteria.ts); `score`/`verdict` are server-derived. */
+export interface DorAssessment {
+  id: string;
+  /** Optional link to a gallery project. Null for free-text / not-yet-onboarded. */
+  app_id: string | null;
+  project_name: string;
+  /** Who ran the check. Null if that profile was later removed. */
+  designer_id: string | null;
+  designer_name: string;
+  track: 'ai' | 'figma';
+  scores: Record<string, number>;
+  /** Normalized 0–10, recomputed server-side on every write. */
+  score: number;
+  verdict: 'cleared' | 'almost' | 'not_ready';
+  /** Both null until the assessment clears. */
+  eta_days: number | null;
+  eta_date: string | null;
+  created_at: string;
+}
+
 export interface ManifestSnapshot {
   projectId: string;
   buildSha: string;
