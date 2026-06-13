@@ -22,9 +22,11 @@ import {
 import { useTheme } from '@/components/providers/theme-provider';
 import type { DorAssessment } from '@/lib/db';
 import {
+  canCommitEta,
   CLEAR_THRESHOLD,
   computeScore,
   criteriaForTrack,
+  ETA_UNLOCK_THRESHOLD,
   verdictLabel,
   type Criterion,
   type CriterionScore,
@@ -61,7 +63,7 @@ export function DorTool({
   const [customProject, setCustomProject] = useState('');
   const [designerName, setDesignerName] = useState(initialDesigner);
   const [scores, setScores] = useState<Record<string, CriterionScore>>({});
-  const [etaDays, setEtaDays] = useState('');
+  const [etaHours, setEtaHours] = useState('');
   const [etaDate, setEtaDate] = useState('');
 
   const [saving, setSaving] = useState(false);
@@ -84,7 +86,8 @@ export function DorTool({
       : customProject.trim();
 
   const canSave = resolvedProjectName.length > 0 && designerName.trim().length > 0;
-  const dirty = touched || etaDays.trim() !== '' || etaDate.trim() !== '';
+  const dirty = touched || etaHours.trim() !== '' || etaDate.trim() !== '';
+  const etaUnlocked = canCommitEta(score);
 
   function setTick(id: string, value: CriterionScore): void {
     setJustSaved(false);
@@ -93,7 +96,7 @@ export function DorTool({
 
   function resetChecklist(): void {
     setScores({});
-    setEtaDays('');
+    setEtaHours('');
     setEtaDate('');
     setError(null);
     setJustSaved(false);
@@ -109,7 +112,7 @@ export function DorTool({
         track,
         designerName: designerName.trim(),
         scores,
-        etaDays: etaDays.trim() ? Number(etaDays) : undefined,
+        etaHours: etaHours.trim() ? Number(etaHours) : undefined,
         etaDate: etaDate.trim() || undefined,
       };
       if (projectMode === 'existing' && appId) payload.appId = appId;
@@ -363,10 +366,10 @@ export function DorTool({
 
           <EtaBlock
             t={t}
-            cleared={cleared}
-            etaDays={etaDays}
+            unlocked={etaUnlocked}
+            etaHours={etaHours}
             etaDate={etaDate}
-            onDays={setEtaDays}
+            onHours={setEtaHours}
             onDate={setEtaDate}
           />
 
@@ -779,17 +782,17 @@ function VerdictCard({
 
 function EtaBlock({
   t,
-  cleared,
-  etaDays,
+  unlocked,
+  etaHours,
   etaDate,
-  onDays,
+  onHours,
   onDate,
 }: {
   t: SwatchTheme;
-  cleared: boolean;
-  etaDays: string;
+  unlocked: boolean;
+  etaHours: string;
   etaDate: string;
-  onDays: (v: string) => void;
+  onHours: (v: string) => void;
   onDate: (v: string) => void;
 }): ReactNode {
   return (
@@ -799,24 +802,24 @@ function EtaBlock({
           <CalendarClock size={11} style={{ marginRight: 6, verticalAlign: '-1px' }} />
           ETA commitment
         </FieldLabel>
-        {!cleared ? (
+        {!unlocked ? (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: t.textDisabled }}>
             <Lock size={11} /> Locked
           </span>
         ) : null}
       </div>
 
-      {cleared ? (
+      {unlocked ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={subLabelStyle(t)}>Estimated days</span>
+            <span style={subLabelStyle(t)}>Estimated hours</span>
             <input
               type="number"
               min={0}
               step={0.5}
-              value={etaDays}
-              onChange={(e) => onDays(e.currentTarget.value)}
-              placeholder="e.g. 5"
+              value={etaHours}
+              onChange={(e) => onHours(e.currentTarget.value)}
+              placeholder="e.g. 6"
               className="dor-focus"
               style={inputStyle(t)}
             />
@@ -834,8 +837,8 @@ function EtaBlock({
         </div>
       ) : (
         <p style={{ margin: '10px 0 0', fontSize: 12.5, color: t.textSecondary, lineHeight: 1.5 }}>
-          Clears at {CLEAR_THRESHOLD.toFixed(1)} with every required item complete. No ETA until then —
-          that’s the point.
+          Unlocks once your score is above {ETA_UNLOCK_THRESHOLD.toFixed(1)} — close enough to commit
+          a time estimate, even before the check fully clears at {CLEAR_THRESHOLD.toFixed(1)}.
         </p>
       )}
     </Card>
@@ -844,10 +847,10 @@ function EtaBlock({
 
 function HistoryRow({ t, row }: { t: SwatchTheme; row: DorAssessment }): ReactNode {
   const color = verdictColor(t, row.verdict);
-  const eta = row.eta_date
-    ? formatDate(row.eta_date)
-    : row.eta_days != null
-      ? `${row.eta_days}d`
+  const eta = row.eta_hours != null
+    ? `${row.eta_hours}h`
+    : row.eta_date
+      ? formatDate(row.eta_date)
       : null;
   return (
     <div

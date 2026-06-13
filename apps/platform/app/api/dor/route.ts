@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { computeScore, sanitizeScores, type Track } from '@/lib/dor/criteria';
+import { canCommitEta, computeScore, sanitizeScores, type Track } from '@/lib/dor/criteria';
 import { getCurrentProfile } from '@/lib/queries';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -42,7 +42,7 @@ interface SavePayload {
   appId?: unknown;
   designerName?: unknown;
   scores?: unknown;
-  etaDays?: unknown;
+  etaHours?: unknown;
   etaDate?: unknown;
 }
 
@@ -129,14 +129,14 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   // Authoritative recompute — never trust client score/verdict.
-  const { score, verdict, cleared } = computeScore(track, scores);
+  const { score, verdict } = computeScore(track, scores);
 
-  // ETA is meaningful only once cleared.
-  let etaDays: number | null = null;
+  // ETA is accepted only once the score clears the unlock threshold (> 8).
+  let etaHours: number | null = null;
   let etaDate: string | null = null;
-  if (cleared) {
-    if (typeof body.etaDays === 'number' && Number.isFinite(body.etaDays) && body.etaDays >= 0) {
-      etaDays = body.etaDays;
+  if (canCommitEta(score)) {
+    if (typeof body.etaHours === 'number' && Number.isFinite(body.etaHours) && body.etaHours >= 0) {
+      etaHours = body.etaHours;
     }
     if (typeof body.etaDate === 'string' && body.etaDate.trim()) {
       const parsed = new Date(body.etaDate);
@@ -155,7 +155,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       scores,
       score,
       verdict,
-      eta_days: etaDays,
+      eta_hours: etaHours,
       eta_date: etaDate,
     })
     .select('*')

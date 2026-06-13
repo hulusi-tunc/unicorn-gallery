@@ -557,11 +557,16 @@ create table if not exists public.dor_assessments (
   -- Normalized 0–10, server-computed. Never trust the client's number.
   score real not null check (score >= 0 and score <= 10),
   verdict text not null check (verdict in ('cleared', 'almost', 'not_ready')),
-  -- ETA stays null until the assessment clears (enforced server-side).
-  eta_days real check (eta_days is null or eta_days >= 0),
+  -- Estimated work in HOURS. Stays null until the score clears the ETA unlock
+  -- threshold (server-enforced — see lib/dor/criteria.ts).
+  eta_hours real check (eta_hours is null or eta_hours >= 0),
   eta_date timestamptz,
   created_at timestamptz not null default now()
 );
+-- ETA is tracked in hours. Earlier builds used eta_days; migrate the column
+-- across (feature is new, so there's no meaningful data to preserve).
+alter table public.dor_assessments add column if not exists eta_hours real;
+alter table public.dor_assessments drop column if exists eta_days;
 create index if not exists dor_assessments_created_idx on public.dor_assessments(created_at desc);
 create index if not exists dor_assessments_app_idx on public.dor_assessments(app_id);
 

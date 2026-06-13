@@ -34,6 +34,18 @@ export const CLEAR_THRESHOLD = 9.0;
 /** Floor for the "almost there" verdict — below this is "not ready". */
 export const ALMOST_THRESHOLD = 7.0;
 
+/**
+ * Score a designer must exceed before they can commit a time estimate.
+ * Deliberately lower than CLEAR_THRESHOLD: you don't need a perfect/cleared
+ * check to give an ETA — just to be confidently "almost there".
+ */
+export const ETA_UNLOCK_THRESHOLD = 8;
+
+/** Whether the ETA field is open at this score (strictly above the threshold). */
+export function canCommitEta(score: number): boolean {
+  return score > ETA_UNLOCK_THRESHOLD;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Criteria. Order here is the order rendered in the UI.
 // ─────────────────────────────────────────────────────────────────────────────

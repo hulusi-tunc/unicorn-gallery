@@ -168,8 +168,8 @@ export interface DorAssessment {
   /** Normalized 0–10, recomputed server-side on every write. */
   score: number;
   verdict: 'cleared' | 'almost' | 'not_ready';
-  /** Both null until the assessment clears. */
-  eta_days: number | null;
+  /** Estimated hours of work. Null until the score clears the ETA unlock threshold. */
+  eta_hours: number | null;
   eta_date: string | null;
   created_at: string;
 }
