@@ -41,13 +41,6 @@ export const ALMOST_THRESHOLD = 7.0;
 /** Applies to both tracks. */
 export const SHARED_CRITERIA: readonly Criterion[] = [
   {
-    id: 'proposal',
-    title: 'Signed / working proposal',
-    description: 'A proposal exists and is signed (or an agreed working version is in hand).',
-    weight: 3,
-    mandatory: true,
-  },
-  {
     id: 'prd',
     title: 'PRD provided',
     description: 'Product requirements doc handed off with goals, scope, and requirements.',
