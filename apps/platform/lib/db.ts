@@ -164,7 +164,8 @@ export interface DorAssessment {
   designer_id: string | null;
   designer_name: string;
   track: 'ai' | 'figma';
-  scores: Record<string, number>;
+  /** Raw answers keyed by criterion id (leaf 0/0.5/1) or "criterionId.subCheckId" ('met'|'na'). */
+  scores: Record<string, number | string>;
   /** Normalized 0–10, recomputed server-side on every write. */
   score: number;
   verdict: 'cleared' | 'almost' | 'not_ready';

@@ -27,9 +27,13 @@ import {
   computeScore,
   criteriaForTrack,
   ETA_UNLOCK_THRESHOLD,
+  evalCriterion,
+  subCheckKey,
   verdictLabel,
+  type AnswerMap,
   type Criterion,
   type CriterionScore,
+  type SubCheck,
   type Track,
   type Verdict,
 } from '@/lib/dor/criteria';
@@ -62,7 +66,7 @@ export function DorTool({
   const [appId, setAppId] = useState<string>(apps[0]?.id ?? '');
   const [customProject, setCustomProject] = useState('');
   const [designerName, setDesignerName] = useState(initialDesigner);
-  const [scores, setScores] = useState<Record<string, CriterionScore>>({});
+  const [answers, setAnswers] = useState<AnswerMap>({});
   const [etaHours, setEtaHours] = useState('');
   const [etaDate, setEtaDate] = useState('');
 
@@ -72,12 +76,20 @@ export function DorTool({
   const [history, setHistory] = useState<DorAssessment[]>(initialHistory);
 
   const criteria = useMemo(() => criteriaForTrack(track), [track]);
-  const result = useMemo(() => computeScore(track, scores), [track, scores]);
+  const result = useMemo(() => computeScore(track, answers), [track, answers]);
   const { score, cleared, verdict, missingMandatory } = result;
 
-  // "Untouched" stays neutral so a fresh form doesn't scream red 0.0 before
-  // the designer has rated anything.
-  const ratedCount = criteria.filter((c) => (scores[c.id] ?? 0) > 0).length;
+  // A criterion counts as "addressed" once it has any signal: a leaf tick > 0,
+  // or any sub-check marked met / N/A. "Untouched" stays neutral so a fresh
+  // form doesn't scream red 0.0 before the designer has rated anything.
+  const ratedCount = criteria.filter((c) =>
+    c.subChecks && c.subChecks.length > 0
+      ? c.subChecks.some((sc) => {
+          const s = answers[subCheckKey(c.id, sc.id)];
+          return s === 'met' || s === 'na';
+        })
+      : typeof answers[c.id] === 'number' && (answers[c.id] as number) > 0,
+  ).length;
   const touched = ratedCount > 0;
 
   const resolvedProjectName =
@@ -89,13 +101,37 @@ export function DorTool({
   const dirty = touched || etaHours.trim() !== '' || etaDate.trim() !== '';
   const etaUnlocked = canCommitEta(score);
 
-  function setTick(id: string, value: CriterionScore): void {
+  function setLeaf(id: string, value: CriterionScore): void {
     setJustSaved(false);
-    setScores((prev) => ({ ...prev, [id]: value }));
+    setAnswers((prev) => ({ ...prev, [id]: value }));
+  }
+
+  // Toggle a sub-check between met and unmet. Marking met also clears any N/A.
+  function toggleSubMet(criterionId: string, subId: string): void {
+    setJustSaved(false);
+    const key = subCheckKey(criterionId, subId);
+    setAnswers((prev) => {
+      const next = { ...prev };
+      if (next[key] === 'met') delete next[key];
+      else next[key] = 'met';
+      return next;
+    });
+  }
+
+  // Toggle a sub-check's N/A flag (drops it out of the criterion's denominator).
+  function toggleSubNa(criterionId: string, subId: string): void {
+    setJustSaved(false);
+    const key = subCheckKey(criterionId, subId);
+    setAnswers((prev) => {
+      const next = { ...prev };
+      if (next[key] === 'na') delete next[key];
+      else next[key] = 'na';
+      return next;
+    });
   }
 
   function resetChecklist(): void {
-    setScores({});
+    setAnswers({});
     setEtaHours('');
     setEtaDate('');
     setError(null);
@@ -111,7 +147,7 @@ export function DorTool({
       const payload: Record<string, unknown> = {
         track,
         designerName: designerName.trim(),
-        scores,
+        scores: answers,
         etaHours: etaHours.trim() ? Number(etaHours) : undefined,
         etaDate: etaDate.trim() || undefined,
       };
@@ -294,9 +330,10 @@ export function DorTool({
               <div>
                 <FieldLabel t={t}>Checklist</FieldLabel>
                 <p style={{ margin: '6px 0 0', fontSize: 12.5, color: t.textSecondary }}>
-                  Rate each item: <strong style={{ color: t.textPrimary }}>0</strong> none ·{' '}
-                  <strong style={{ color: t.textPrimary }}>½</strong> partial ·{' '}
-                  <strong style={{ color: t.textPrimary }}>1</strong> done.
+                  Tick each rubric sub-check that’s true; rate the rest{' '}
+                  <strong style={{ color: t.textPrimary }}>0</strong> ·{' '}
+                  <strong style={{ color: t.textPrimary }}>½</strong> ·{' '}
+                  <strong style={{ color: t.textPrimary }}>1</strong>.
                 </p>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
@@ -341,8 +378,10 @@ export function DorTool({
                   key={c.id}
                   t={t}
                   criterion={c}
-                  value={scores[c.id] ?? 0}
-                  onChange={(v) => setTick(c.id, v)}
+                  answers={answers}
+                  onLeaf={(v) => setLeaf(c.id, v)}
+                  onSubMet={(subId) => toggleSubMet(c.id, subId)}
+                  onSubNa={(subId) => toggleSubNa(c.id, subId)}
                   last={i === criteria.length - 1}
                 />
               ))}
@@ -464,59 +503,265 @@ export function DorTool({
 function CriterionRow({
   t,
   criterion,
-  value,
-  onChange,
+  answers,
+  onLeaf,
+  onSubMet,
+  onSubNa,
   last,
 }: {
   t: SwatchTheme;
   criterion: Criterion;
-  value: CriterionScore;
-  onChange: (v: CriterionScore) => void;
+  answers: AnswerMap;
+  onLeaf: (v: CriterionScore) => void;
+  onSubMet: (subId: string) => void;
+  onSubNa: (subId: string) => void;
   last: boolean;
 }): ReactNode {
-  // A mandatory item sitting at a partial ½ still blocks clearance — flag it
-  // so the designer isn't surprised when the verdict won't clear.
-  const blocking = criterion.mandatory && value < 1;
+  const isRubric = Boolean(criterion.subChecks && criterion.subChecks.length > 0);
+  const ev = evalCriterion(criterion, answers);
+  // A mandatory item below a full 1 blocks clearance — flag it so the designer
+  // isn't surprised. A fully-N/A rubric (value null) doesn't apply, so no flag.
+  const blocking = criterion.mandatory && ev.value !== null && ev.value < 1;
+  const rawLeaf = answers[criterion.id];
+  const leafValue: CriterionScore = typeof rawLeaf === 'number' ? (rawLeaf as CriterionScore) : 0;
+
+  return (
+    <div
+      style={{
+        padding: '14px 18px',
+        borderBottom: last ? 'none' : `1px solid ${t.border}`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+        <WeightBadge t={t} weight={criterion.weight} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 500, color: t.textDisplay }}>
+              {criterion.title}
+            </span>
+            {criterion.mandatory ? <RequiredTag t={t} blocking={blocking} /> : null}
+          </div>
+          <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.45, color: t.textSecondary }}>
+            {criterion.description}
+          </p>
+        </div>
+        {isRubric ? (
+          <RollupChip t={t} met={ev.met} applicable={ev.applicable} complete={ev.value === 1} />
+        ) : (
+          <TickPicker t={t} value={leafValue} onChange={onLeaf} label={criterion.title} />
+        )}
+      </div>
+
+      {isRubric ? (
+        <div style={{ marginLeft: 44, marginTop: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {criterion.subChecks!.map((sc) => {
+            const state = answers[subCheckKey(criterion.id, sc.id)];
+            return (
+              <SubCheckRow
+                key={sc.id}
+                t={t}
+                subCheck={sc}
+                met={state === 'met'}
+                na={state === 'na'}
+                onToggleMet={() => onSubMet(sc.id)}
+                onToggleNa={() => onSubNa(sc.id)}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RequiredTag({ t, blocking }: { t: SwatchTheme; blocking: boolean }): ReactNode {
+  return (
+    <span
+      style={{
+        fontFamily: editorialFonts.mono,
+        fontSize: 9,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        color: blocking ? t.warning : t.textDisabled,
+        border: `1px solid ${blocking ? t.warning : t.border}`,
+        borderRadius: 999,
+        padding: '1px 6px',
+        transition: 'color 120ms ease-out, border-color 120ms ease-out',
+      }}
+    >
+      Required
+    </span>
+  );
+}
+
+/** The "4 / 6" rollup shown on a rubric criterion's header. */
+function RollupChip({
+  t,
+  met,
+  applicable,
+  complete,
+}: {
+  t: SwatchTheme;
+  met: number;
+  applicable: number;
+  complete: boolean;
+}): ReactNode {
+  const allNa = applicable === 0;
+  const color = allNa ? t.textDisabled : complete ? t.success : met > 0 ? t.accent : t.textSecondary;
+  return (
+    <span
+      title={allNa ? 'All sub-checks marked N/A' : `${met} of ${applicable} sub-checks met`}
+      style={{
+        flexShrink: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        height: 28,
+        padding: '0 10px',
+        borderRadius: 999,
+        background: t.surfaceInk,
+        border: `1px solid ${complete ? t.success : t.border}`,
+        color,
+        fontFamily: editorialFonts.mono,
+        fontSize: 12,
+        fontWeight: 600,
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      {complete ? <Check size={12} /> : null}
+      {allNa ? 'N/A' : `${met}/${applicable}`}
+    </span>
+  );
+}
+
+function SubCheckRow({
+  t,
+  subCheck,
+  met,
+  na,
+  onToggleMet,
+  onToggleNa,
+}: {
+  t: SwatchTheme;
+  subCheck: SubCheck;
+  met: boolean;
+  na: boolean;
+  onToggleMet: () => void;
+  onToggleNa: () => void;
+}): ReactNode {
   return (
     <div
       style={{
         display: 'flex',
         alignItems: 'flex-start',
-        gap: 14,
-        padding: '14px 18px',
-        borderBottom: last ? 'none' : `1px solid ${t.border}`,
+        gap: 10,
+        padding: '7px 10px',
+        borderRadius: 8,
+        background: na ? 'transparent' : t.surface,
+        opacity: na ? 0.5 : 1,
+        transition: 'opacity 120ms ease-out, background 120ms ease-out',
       }}
     >
-      <WeightBadge t={t} weight={criterion.weight} />
+      <Checkbox t={t} checked={met} disabled={na} onToggle={onToggleMet} label={subCheck.title} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 14, fontWeight: 500, color: t.textDisplay }}>
-            {criterion.title}
-          </span>
-          {criterion.mandatory ? (
-            <span
-              style={{
-                fontFamily: editorialFonts.mono,
-                fontSize: 9,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: blocking ? t.warning : t.textDisabled,
-                border: `1px solid ${blocking ? t.warning : t.border}`,
-                borderRadius: 999,
-                padding: '1px 6px',
-                transition: 'color 120ms ease-out, border-color 120ms ease-out',
-              }}
-            >
-              Required
-            </span>
-          ) : null}
-        </div>
-        <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.45, color: t.textSecondary }}>
-          {criterion.description}
+        <p
+          style={{
+            margin: 0,
+            fontSize: 13,
+            fontWeight: 500,
+            color: t.textPrimary,
+            textDecoration: na ? 'line-through' : 'none',
+          }}
+        >
+          {subCheck.title}
+        </p>
+        <p style={{ margin: '1px 0 0', fontSize: 11.5, lineHeight: 1.4, color: t.textSecondary }}>
+          {subCheck.description}
         </p>
       </div>
-      <TickPicker t={t} value={value} onChange={onChange} label={criterion.title} />
+      <NaToggle t={t} active={na} onToggle={onToggleNa} />
     </div>
+  );
+}
+
+function Checkbox({
+  t,
+  checked,
+  disabled,
+  onToggle,
+  label,
+}: {
+  t: SwatchTheme;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+  label: string;
+}): ReactNode {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onToggle}
+      className="dor-focus"
+      style={{
+        flexShrink: 0,
+        marginTop: 1,
+        width: 20,
+        height: 20,
+        borderRadius: 6,
+        border: `1px solid ${checked ? t.success : t.borderStrong}`,
+        background: checked ? t.success : 'transparent',
+        color: checked ? t.accentFg : 'transparent',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        padding: 0,
+        transition: 'background 120ms ease-out, border-color 120ms ease-out',
+      }}
+    >
+      <Check size={13} strokeWidth={3} />
+    </button>
+  );
+}
+
+function NaToggle({
+  t,
+  active,
+  onToggle,
+}: {
+  t: SwatchTheme;
+  active: boolean;
+  onToggle: () => void;
+}): ReactNode {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label="Mark not applicable"
+      onClick={onToggle}
+      className="dor-focus"
+      style={{
+        flexShrink: 0,
+        alignSelf: 'center',
+        padding: '3px 8px',
+        borderRadius: 999,
+        border: `1px solid ${active ? t.borderStrong : t.border}`,
+        background: active ? t.surfaceRaised : 'transparent',
+        color: active ? t.textPrimary : t.textDisabled,
+        fontFamily: editorialFonts.mono,
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: '0.04em',
+        cursor: 'pointer',
+        transition: 'background 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out',
+      }}
+    >
+      N/A
+    </button>
   );
 }
 

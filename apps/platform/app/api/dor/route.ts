@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { canCommitEta, computeScore, sanitizeScores, type Track } from '@/lib/dor/criteria';
+import { canCommitEta, computeScore, sanitizeAnswers, type Track } from '@/lib/dor/criteria';
 import { getCurrentProfile } from '@/lib/queries';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     body.scores && typeof body.scores === 'object'
       ? (body.scores as Record<string, unknown>)
       : {};
-  const scores = sanitizeScores(track, rawScores);
+  const scores = sanitizeAnswers(track, rawScores);
 
   const supabase = await getSupabaseServerClient();
 
