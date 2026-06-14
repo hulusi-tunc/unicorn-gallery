@@ -109,7 +109,6 @@ export const SHARED_CRITERIA: readonly Criterion[] = [
       { id: 'acceptance', title: 'Clear acceptance criteria', description: 'Each item states what “done” looks like, testably.' },
       { id: 'grouped', title: 'Logically grouped', description: 'Organised by epic / flow / feature, not a flat dump.' },
       { id: 'prioritised', title: 'Prioritised', description: 'Each item carries a priority (P0/P1/P2 or MoSCoW).' },
-      { id: 'non_goals', title: 'Non-goals stated', description: 'What is explicitly not included is written down.' },
       { id: 'granularity', title: 'Design-able granularity', description: 'Items are sized to scope a screen/flow from — no “TBD” / “misc”.' },
     ],
   },
@@ -133,13 +132,6 @@ export const SHARED_CRITERIA: readonly Criterion[] = [
     ],
   },
   {
-    id: 'personas',
-    title: 'Personas with goals + pain points',
-    description: 'Target personas are defined with their goals and pain points.',
-    weight: 2,
-    mandatory: false,
-  },
-  {
     id: 'brand',
     title: 'Brand decision + assets',
     description: 'Brand direction is decided and the needed assets (logo, colors, fonts) are available.',
@@ -148,8 +140,8 @@ export const SHARED_CRITERIA: readonly Criterion[] = [
   },
   {
     id: 'flows',
-    title: 'Key user flows / screen list',
-    description: 'The primary user flows or a screen inventory is provided.',
+    title: 'Key user flows',
+    description: 'The primary end-to-end user journeys — how users move through the product — are mapped. (Screens themselves are covered by the WBS.)',
     weight: 2,
     mandatory: false,
   },
