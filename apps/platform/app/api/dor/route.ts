@@ -1,6 +1,13 @@
 import { nanoid } from 'nanoid';
 import { NextResponse, type NextRequest } from 'next/server';
-import { canCommitEta, computeScore, sanitizeAnswers, type Track } from '@/lib/dor/criteria';
+import {
+  canCommitEta,
+  computeScore,
+  sanitizeAnswers,
+  sanitizeNote,
+  sanitizeSectionNotes,
+  type Track,
+} from '@/lib/dor/criteria';
 import { getCurrentProfile } from '@/lib/queries';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -46,6 +53,7 @@ interface SavePayload {
   etaHours?: unknown;
   etaDate?: unknown;
   notes?: unknown;
+  sectionNotes?: unknown;
 }
 
 function isTrack(v: unknown): v is Track {
@@ -146,10 +154,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
   }
 
-  const notes =
-    typeof body.notes === 'string' && body.notes.trim()
-      ? body.notes.trim().slice(0, 5000)
-      : null;
+  const notes = sanitizeNote(body.notes, 5000);
+  const sectionNotes = sanitizeSectionNotes(track, body.sectionNotes);
 
   const { data, error } = await supabase
     .from('dor_assessments')
@@ -165,6 +171,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       eta_hours: etaHours,
       eta_date: etaDate,
       notes,
+      section_notes: sectionNotes,
       // Every assessment is shareable via an unguessable read-only link.
       share_token: `dor_${nanoid(24)}`,
     })

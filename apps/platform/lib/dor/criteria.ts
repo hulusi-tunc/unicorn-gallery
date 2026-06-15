@@ -1,17 +1,17 @@
 /**
  * Definition of Ready — single source of truth.
  *
- * This is the ONE file that defines what "ready to start design" means: the
- * criteria, their weights, which are mandatory, the per-track additions, the
- * clear threshold, and the scoring math. Both the UI (live verdict) and the
- * server (authoritative recompute on save) import from here so the two can
- * never drift. Keep it dependency-free + framework-free so it stays importable
- * from client components AND route handlers.
+ * The ONE file defining what "ready to start design" means: criteria, weights,
+ * which are mandatory, per-track additions, the clear threshold, and the scoring
+ * math. Both the UI (live verdict) and the server (authoritative recompute on
+ * save) import from here so they can't drift. Dependency-free + framework-free
+ * so it stays importable from client components AND route handlers.
  *
- * Heavy / fuzzy criteria (WBS, PRD, scope) carry a `subChecks` rubric: instead
- * of one subjective 0/½/1, the designer answers concrete yes/no items and the
- * criterion's value is *rolled up* from them — standardising judgment across
- * the team and teaching juniors what "good" looks like.
+ * Heavy sections (PRD, WBS) carry a `subChecks` rubric mapped to the real PRD /
+ * WBS template sections, so every checkbox has an answer in the doc. Each
+ * sub-check is simply present (checked) or MISSING (unchecked) — unchecked
+ * counts against the score and, for mandatory sections, blocks clearance. There
+ * is no "N/A": these are fields a good doc should always contain.
  */
 
 export type Track = 'ai' | 'figma';
@@ -19,10 +19,10 @@ export type Track = 'ai' | 'figma';
 /** A single tick on a leaf criterion: not started, partial, or done. */
 export type CriterionScore = 0 | 0.5 | 1;
 
-/** A sub-check's state. Absent from the answer map === unmet (the default). */
-export type SubCheckState = 'met' | 'na';
+/** A sub-check's stored state. Absent from the answer map === missing (unchecked). */
+export type SubCheckState = 'met';
 
-/** Any stored answer value: a leaf tick, or a sub-check state. */
+/** Any stored answer value: a leaf tick, or a checked sub-check. */
 export type AnswerValue = CriterionScore | SubCheckState;
 
 /** criterionId (leaf) or "criterionId.subCheckId" (rubric) → answer. */
@@ -43,14 +43,13 @@ export interface Criterion {
   id: string;
   title: string;
   description: string;
-  /** Importance multiplier, 1–3. */
+  /** Importance multiplier, 1–3. Shown to users as a % share of the score. */
   weight: 1 | 2 | 3;
   /** Mandatory items must reach a full 1 before an assessment can clear. */
   mandatory: boolean;
   /**
-   * When present, this criterion is rubric-scored: its value is the fraction
-   * of applicable sub-checks met (N/A sub-checks drop out of the denominator),
-   * and a mandatory criterion clears only when ALL applicable sub-checks pass.
+   * When present, this criterion is rubric-scored: its value is the fraction of
+   * sub-checks checked. A mandatory criterion clears only when ALL are checked.
    */
   subChecks?: readonly SubCheck[];
 }
@@ -62,9 +61,9 @@ export const CLEAR_THRESHOLD = 9.0;
 export const ALMOST_THRESHOLD = 7.0;
 
 /**
- * Score a designer must exceed before they can commit a time estimate.
- * Deliberately lower than CLEAR_THRESHOLD: you don't need a perfect/cleared
- * check to give an ETA — just to be confidently "almost there".
+ * Score a designer must exceed before they can commit an ETA. Deliberately
+ * lower than CLEAR_THRESHOLD: you don't need a perfect/cleared check to give an
+ * ETA — just to be confidently "almost there".
  */
 export const ETA_UNLOCK_THRESHOLD = 8;
 
@@ -79,37 +78,36 @@ export function subCheckKey(criterionId: string, subCheckId: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Criteria. Order here is the order rendered in the UI.
+// Criteria — mapped to the PRD / WBS template sections. Order = render order.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Applies to both tracks. */
 export const SHARED_CRITERIA: readonly Criterion[] = [
   {
     id: 'prd',
-    title: 'PRD provided',
-    description: 'A product requirements doc has been handed off and is usable.',
+    title: 'PRD',
+    description: 'The product requirements doc is handed off and complete.',
     weight: 3,
     mandatory: true,
     subChecks: [
-      { id: 'problem', title: 'Problem & goal clear', description: 'The “why” — the problem being solved and the goal — is stated.' },
-      { id: 'users', title: 'Target users identified', description: 'Who the product is for is named.' },
-      { id: 'requirements', title: 'Functional requirements enumerated', description: 'What it must do is listed, not implied.' },
-      { id: 'success', title: 'Success criteria defined', description: 'What “done” / “working” means is measurable.' },
-      { id: 'constraints', title: 'Constraints & assumptions stated', description: 'Known limits and assumptions are written down.' },
+      { id: 'problem', title: 'Problem & goal are clear', description: 'Why we’re building this and what success looks like.' },
+      { id: 'users', title: 'Target users are defined', description: 'Who it’s for — roles or personas.' },
+      { id: 'features', title: 'Features listed & prioritised', description: 'The feature set with Must / Should / Could / Won’t (MoSCoW).' },
+      { id: 'scope', title: 'Out-of-scope & V2 are stated', description: 'What we’re not building now, and what’s deferred to later.' },
+      { id: 'success', title: 'Success metrics have targets', description: 'KPIs with actual numbers — not “to be defined”.' },
     ],
   },
   {
     id: 'wbs',
-    title: 'Work breakdown structure',
-    description: 'A WBS exists and is good enough to design from.',
+    title: 'WBS',
+    description: 'The work breakdown is good enough to design from.',
     weight: 3,
     mandatory: true,
     subChecks: [
-      { id: 'coverage', title: 'Complete coverage', description: 'Every feature in the PRD maps to a WBS item — nothing missing.' },
-      { id: 'acceptance', title: 'Clear acceptance criteria', description: 'Each item states what “done” looks like, testably.' },
-      { id: 'grouped', title: 'Logically grouped', description: 'Organised by epic / flow / feature, not a flat dump.' },
-      { id: 'prioritised', title: 'Prioritised', description: 'Items have a priority (P0/P1/P2 or MoSCoW) — in the WBS, or carried over from the PRD.' },
-      { id: 'granularity', title: 'Design-able granularity', description: 'Items are sized to scope a screen/flow from — no “TBD” / “misc”.' },
+      { id: 'coverage', title: 'Every feature has a WBS item', description: 'Nothing in the PRD is missing from the breakdown.' },
+      { id: 'acceptance', title: 'Each item has acceptance criteria', description: 'Every story says what “done” looks like.' },
+      { id: 'grouped', title: 'Grouped by epic / flow', description: 'Organised, not a flat dump.' },
+      { id: 'granularity', title: 'Items are sized to design from', description: 'Each maps to a screen/flow — no “TBD” or “misc”.' },
     ],
   },
   {
@@ -120,35 +118,23 @@ export const SHARED_CRITERIA: readonly Criterion[] = [
     mandatory: true,
   },
   {
-    id: 'scope',
-    title: 'Out-of-scope + V2 deferrals clear',
-    description: 'The boundaries of this build are explicit.',
-    weight: 2,
-    mandatory: true,
-    subChecks: [
-      { id: 'not_building', title: 'Explicit “not building” list', description: 'What’s out of scope for this round is written down.' },
-      { id: 'v2', title: 'V2 deferrals named', description: 'What’s consciously pushed to a later version is listed.' },
-      { id: 'edge_states', title: 'Error / empty / edge states addressed', description: 'Non-happy-path cases are covered or consciously deferred.' },
-    ],
-  },
-  {
     id: 'roles',
-    title: 'User roles & permissions defined',
-    description: 'Every user role and what each can and can’t access is pinned down (single-role projects: just confirm the one role).',
+    title: 'User roles & permissions',
+    description: 'Each user role and what it can access is defined (single-role: just confirm the one).',
     weight: 2,
     mandatory: true,
   },
   {
     id: 'brand',
     title: 'Brand identity',
-    description: 'Brand identity is settled — either existing assets (logo, colours, fonts) are provided, or it’s being created in this project and the direction + references are agreed.',
+    description: 'Brand is settled — assets provided, or being created here with agreed direction.',
     weight: 2,
     mandatory: false,
   },
   {
     id: 'flows',
     title: 'Key user flows',
-    description: 'The primary end-to-end user journeys — how users move through the product — are mapped. (Screens themselves are covered by the WBS.)',
+    description: 'The primary end-to-end journeys are mapped.',
     weight: 2,
     mandatory: false,
   },
@@ -189,6 +175,17 @@ export function criteriaForTrack(track: Track): Criterion[] {
   return [...SHARED_CRITERIA, ...extra];
 }
 
+/** Sum of all criterion weights for a track — the denominator behind the % shares. */
+export function trackTotalWeight(track: Track): number {
+  return criteriaForTrack(track).reduce((sum, c) => sum + c.weight, 0);
+}
+
+/** A criterion's share of the score, as a rounded percentage (replaces the ×N badge). */
+export function criterionSharePct(track: Track, criterion: Criterion): number {
+  const total = trackTotalWeight(track);
+  return total === 0 ? 0 : Math.round((criterion.weight / total) * 100);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Scoring. The server treats this as authoritative — the client value is only
 // ever a live preview and is recomputed before any write.
@@ -201,12 +198,12 @@ export function normalizeTick(value: unknown): CriterionScore {
 }
 
 export interface CriterionEval {
-  /** 0–1. `null` means "not applicable" (every sub-check marked N/A) — excluded from the score. */
-  value: number | null;
-  /** Rubric only: sub-checks marked met. */
+  /** 0–1: leaf tick, or the fraction of sub-checks checked. */
+  value: number;
+  /** Rubric only: sub-checks checked. */
   met: number;
-  /** Rubric only: sub-checks that count (total minus N/A). */
-  applicable: number;
+  /** Rubric only: total sub-checks. */
+  total: number;
 }
 
 /** Evaluate a single criterion against the answer map (leaf tick or rubric rollup). */
@@ -214,17 +211,12 @@ export function evalCriterion(criterion: Criterion, answers: AnswerMap): Criteri
   const subs = criterion.subChecks;
   if (subs && subs.length > 0) {
     let met = 0;
-    let applicable = 0;
     for (const sc of subs) {
-      const state = answers[subCheckKey(criterion.id, sc.id)];
-      if (state === 'na') continue;
-      applicable += 1;
-      if (state === 'met') met += 1;
+      if (answers[subCheckKey(criterion.id, sc.id)] === 'met') met += 1;
     }
-    const value = applicable === 0 ? null : met / applicable;
-    return { value, met, applicable };
+    return { value: met / subs.length, met, total: subs.length };
   }
-  return { value: normalizeTick(answers[criterion.id]), met: 0, applicable: 0 };
+  return { value: normalizeTick(answers[criterion.id]), met: 0, total: 0 };
 }
 
 export interface ScoreResult {
@@ -243,10 +235,7 @@ function round1(n: number): number {
 
 /**
  * Compute the normalized score + verdict for a set of answers on a track.
- *
- * Leaf criteria use their 0/½/1 tick; rubric criteria roll up their sub-checks.
- * A criterion whose sub-checks are all N/A drops out of the weighted total
- * entirely (numerator and denominator), so it neither helps nor hurts.
+ * Leaf criteria use their 0/½/1 tick; rubric criteria roll up checked sub-checks.
  */
 export function computeScore(track: Track, answers: AnswerMap): ScoreResult {
   const criteria = criteriaForTrack(track);
@@ -256,7 +245,6 @@ export function computeScore(track: Track, answers: AnswerMap): ScoreResult {
 
   for (const c of criteria) {
     const { value } = evalCriterion(c, answers);
-    if (value === null) continue; // fully N/A → not applicable
     weighted += value * c.weight;
     totalWeight += c.weight;
     if (c.mandatory && value < 1) missingMandatory.push(c);
@@ -284,12 +272,34 @@ export function sanitizeAnswers(
     if (c.subChecks && c.subChecks.length > 0) {
       for (const sc of c.subChecks) {
         const key = subCheckKey(c.id, sc.id);
-        const v = raw[key];
-        if (v === 'met' || v === 'na') out[key] = v; // unmet is omitted
+        if (raw[key] === 'met') out[key] = 'met'; // unchecked is omitted
       }
     } else {
       out[c.id] = normalizeTick(raw[c.id]);
     }
+  }
+  return out;
+}
+
+/** Trim + cap a free-text note. Shared by the global + per-section notes. */
+export function sanitizeNote(value: unknown, max = 2000): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : null;
+}
+
+/** Keep only section notes whose key is a real criterion id on this track. */
+export function sanitizeSectionNotes(
+  track: Track,
+  raw: unknown,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  const ids = new Set(criteriaForTrack(track).map((c) => c.id));
+  for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!ids.has(key)) continue;
+    const note = sanitizeNote(val);
+    if (note) out[key] = note;
   }
   return out;
 }

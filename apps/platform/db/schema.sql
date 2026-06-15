@@ -563,6 +563,9 @@ create table if not exists public.dor_assessments (
   eta_date timestamptz,
   -- Designer's free-text final thoughts on the handoff.
   notes text,
+  -- Optional per-section notes: { [criterionId]: note }. Lets the designer
+  -- flag/ask the PM about a specific section (PRD, WBS, …).
+  section_notes jsonb not null default '{}'::jsonb,
   -- Unguessable token for the public read-only share page (/shared/dor/<token>).
   share_token text,
   created_at timestamptz not null default now()
@@ -573,6 +576,7 @@ alter table public.dor_assessments add column if not exists eta_hours real;
 alter table public.dor_assessments drop column if exists eta_days;
 -- Notes + public share token (added after the table shipped).
 alter table public.dor_assessments add column if not exists notes text;
+alter table public.dor_assessments add column if not exists section_notes jsonb not null default '{}'::jsonb;
 alter table public.dor_assessments add column if not exists share_token text;
 create unique index if not exists dor_assessments_share_token_key on public.dor_assessments(share_token);
 create index if not exists dor_assessments_created_idx on public.dor_assessments(created_at desc);

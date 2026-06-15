@@ -174,6 +174,8 @@ export interface DorAssessment {
   eta_date: string | null;
   /** Designer's free-text final thoughts on the handoff. */
   notes: string | null;
+  /** Optional per-section notes, keyed by criterion id. */
+  section_notes: Record<string, string>;
   /** Unguessable token for the public read-only share page. */
   share_token: string | null;
   created_at: string;

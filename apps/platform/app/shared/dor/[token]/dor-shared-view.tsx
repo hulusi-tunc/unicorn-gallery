@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarClock, Check, ClipboardCheck, Minus, X } from 'lucide-react';
+import { CalendarClock, Check, ClipboardCheck, X } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { UnicornLogo } from '@/components/brand/unicorn-logo';
 import { useTheme } from '@/components/providers/theme-provider';
@@ -8,6 +8,7 @@ import type { DorAssessment } from '@/lib/db';
 import {
   CLEAR_THRESHOLD,
   criteriaForTrack,
+  criterionSharePct,
   evalCriterion,
   subCheckKey,
   verdictLabel,
@@ -89,7 +90,7 @@ export function DorSharedView({ assessment }: { assessment: DorAssessment }): Re
             <span style={{ fontSize: 13, color: t.textPrimary }}>
               {eta ? (
                 <>
-                  <strong>{eta}</strong> estimated
+                  <strong>{eta}</strong> to first review
                 </>
               ) : null}
               {eta && assessment.eta_date ? ' · ' : null}
@@ -112,7 +113,15 @@ export function DorSharedView({ assessment }: { assessment: DorAssessment }): Re
         <h2 style={{ margin: '28px 0 12px', fontSize: 15, fontWeight: 600, color: t.textDisplay }}>Checklist</h2>
         <div style={{ borderRadius: 12, border: `1px solid ${t.border}`, overflow: 'hidden' }}>
           {criteria.map((c, i) => (
-            <SharedCriterion key={c.id} t={t} criterion={c} answers={answers} last={i === criteria.length - 1} />
+            <SharedCriterion
+              key={c.id}
+              t={t}
+              criterion={c}
+              answers={answers}
+              sharePct={criterionSharePct(assessment.track, c)}
+              note={assessment.section_notes?.[c.id]}
+              last={i === criteria.length - 1}
+            />
           ))}
         </div>
 
@@ -128,11 +137,15 @@ function SharedCriterion({
   t,
   criterion,
   answers,
+  sharePct,
+  note,
   last,
 }: {
   t: SwatchTheme;
   criterion: Criterion;
   answers: AnswerMap;
+  sharePct: number;
+  note?: string;
   last: boolean;
 }): ReactNode {
   const ev = evalCriterion(criterion, answers);
@@ -147,9 +160,9 @@ function SharedCriterion({
           style={{
             flexShrink: 0,
             marginTop: 1,
-            minWidth: 28,
+            minWidth: 38,
             height: 20,
-            padding: '0 6px',
+            padding: '0 7px',
             borderRadius: 6,
             background: t.surfaceInk,
             border: `1px solid ${t.border}`,
@@ -162,7 +175,7 @@ function SharedCriterion({
             justifyContent: 'center',
           }}
         >
-          ×{criterion.weight}
+          {sharePct}%
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{ fontSize: 13.5, fontWeight: 500, color: t.textDisplay }}>{criterion.title}</span>
@@ -192,7 +205,7 @@ function SharedCriterion({
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            {ev.applicable === 0 ? 'N/A' : `${ev.met}/${ev.applicable}`}
+            {ev.met}/{ev.total}
           </span>
         ) : (
           <LeafBadge t={t} value={leaf} />
@@ -202,29 +215,36 @@ function SharedCriterion({
       {isRubric ? (
         <div style={{ marginLeft: 38, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
           {criterion.subChecks!.map((sc) => {
-            const s = answers[subCheckKey(criterion.id, sc.id)];
-            const state = s === 'met' ? 'met' : s === 'na' ? 'na' : 'unmet';
+            const met = answers[subCheckKey(criterion.id, sc.id)] === 'met';
             return (
-              <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: state === 'na' ? 0.5 : 1 }}>
-                {state === 'met' ? (
+              <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {met ? (
                   <Check size={13} style={{ color: t.success, flexShrink: 0 }} />
-                ) : state === 'na' ? (
-                  <Minus size={13} style={{ color: t.textDisabled, flexShrink: 0 }} />
                 ) : (
                   <X size={13} style={{ color: t.textDisabled, flexShrink: 0 }} />
                 )}
-                <span
-                  style={{
-                    fontSize: 12.5,
-                    color: state === 'met' ? t.textPrimary : t.textSecondary,
-                    textDecoration: state === 'na' ? 'line-through' : 'none',
-                  }}
-                >
+                <span style={{ fontSize: 12.5, color: met ? t.textPrimary : t.textSecondary }}>
                   {sc.title}
                 </span>
+                {!met ? (
+                  <span style={{ marginLeft: 'auto', fontFamily: editorialFonts.mono, fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: t.textDisabled }}>
+                    Missing
+                  </span>
+                ) : null}
               </div>
             );
           })}
+        </div>
+      ) : null}
+
+      {note ? (
+        <div style={{ marginLeft: 38, marginTop: 8, padding: '8px 10px', borderRadius: 8, background: t.surfaceInk, border: `1px solid ${t.border}` }}>
+          <p style={{ margin: 0, fontFamily: editorialFonts.mono, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: t.textDisabled }}>
+            Note
+          </p>
+          <p style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.5, color: t.textPrimary, whiteSpace: 'pre-wrap' }}>
+            {note}
+          </p>
         </div>
       ) : null}
     </div>
