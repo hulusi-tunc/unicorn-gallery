@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid';
 import { NextResponse, type NextRequest } from 'next/server';
 import { canCommitEta, computeScore, sanitizeAnswers, type Track } from '@/lib/dor/criteria';
 import { getCurrentProfile } from '@/lib/queries';
@@ -44,6 +45,7 @@ interface SavePayload {
   scores?: unknown;
   etaHours?: unknown;
   etaDate?: unknown;
+  notes?: unknown;
 }
 
 function isTrack(v: unknown): v is Track {
@@ -144,6 +146,11 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
   }
 
+  const notes =
+    typeof body.notes === 'string' && body.notes.trim()
+      ? body.notes.trim().slice(0, 5000)
+      : null;
+
   const { data, error } = await supabase
     .from('dor_assessments')
     .insert({
@@ -157,6 +164,9 @@ export async function POST(request: NextRequest): Promise<Response> {
       verdict,
       eta_hours: etaHours,
       eta_date: etaDate,
+      notes,
+      // Every assessment is shareable via an unguessable read-only link.
+      share_token: `dor_${nanoid(24)}`,
     })
     .select('*')
     .single();

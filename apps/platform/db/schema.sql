@@ -561,12 +561,20 @@ create table if not exists public.dor_assessments (
   -- threshold (server-enforced — see lib/dor/criteria.ts).
   eta_hours real check (eta_hours is null or eta_hours >= 0),
   eta_date timestamptz,
+  -- Designer's free-text final thoughts on the handoff.
+  notes text,
+  -- Unguessable token for the public read-only share page (/shared/dor/<token>).
+  share_token text,
   created_at timestamptz not null default now()
 );
 -- ETA is tracked in hours. Earlier builds used eta_days; migrate the column
 -- across (feature is new, so there's no meaningful data to preserve).
 alter table public.dor_assessments add column if not exists eta_hours real;
 alter table public.dor_assessments drop column if exists eta_days;
+-- Notes + public share token (added after the table shipped).
+alter table public.dor_assessments add column if not exists notes text;
+alter table public.dor_assessments add column if not exists share_token text;
+create unique index if not exists dor_assessments_share_token_key on public.dor_assessments(share_token);
 create index if not exists dor_assessments_created_idx on public.dor_assessments(created_at desc);
 create index if not exists dor_assessments_app_idx on public.dor_assessments(app_id);
 

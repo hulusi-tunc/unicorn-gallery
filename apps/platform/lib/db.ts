@@ -172,6 +172,10 @@ export interface DorAssessment {
   /** Estimated hours of work. Null until the score clears the ETA unlock threshold. */
   eta_hours: number | null;
   eta_date: string | null;
+  /** Designer's free-text final thoughts on the handoff. */
+  notes: string | null;
+  /** Unguessable token for the public read-only share page. */
+  share_token: string | null;
   created_at: string;
 }
 

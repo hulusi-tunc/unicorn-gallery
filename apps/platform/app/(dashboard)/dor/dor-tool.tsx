@@ -4,8 +4,11 @@ import {
   CalendarClock,
   Check,
   ClipboardCheck,
+  Copy,
+  Link2,
   Loader2,
   Lock,
+  MessageSquare,
   RotateCcw,
   Sparkles,
   PenTool,
@@ -69,10 +72,11 @@ export function DorTool({
   const [answers, setAnswers] = useState<AnswerMap>({});
   const [etaHours, setEtaHours] = useState('');
   const [etaDate, setEtaDate] = useState('');
+  const [notes, setNotes] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [justSaved, setJustSaved] = useState(false);
+  const [lastSaved, setLastSaved] = useState<DorAssessment | null>(null);
   const [history, setHistory] = useState<DorAssessment[]>(initialHistory);
 
   const criteria = useMemo(() => criteriaForTrack(track), [track]);
@@ -102,13 +106,13 @@ export function DorTool({
   const etaUnlocked = canCommitEta(score);
 
   function setLeaf(id: string, value: CriterionScore): void {
-    setJustSaved(false);
+    setLastSaved(null);
     setAnswers((prev) => ({ ...prev, [id]: value }));
   }
 
   // Toggle a sub-check between met and unmet. Marking met also clears any N/A.
   function toggleSubMet(criterionId: string, subId: string): void {
-    setJustSaved(false);
+    setLastSaved(null);
     const key = subCheckKey(criterionId, subId);
     setAnswers((prev) => {
       const next = { ...prev };
@@ -120,7 +124,7 @@ export function DorTool({
 
   // Toggle a sub-check's N/A flag (drops it out of the criterion's denominator).
   function toggleSubNa(criterionId: string, subId: string): void {
-    setJustSaved(false);
+    setLastSaved(null);
     const key = subCheckKey(criterionId, subId);
     setAnswers((prev) => {
       const next = { ...prev };
@@ -134,15 +138,16 @@ export function DorTool({
     setAnswers({});
     setEtaHours('');
     setEtaDate('');
+    setNotes('');
     setError(null);
-    setJustSaved(false);
+    setLastSaved(null);
   }
 
   async function handleSave(): Promise<void> {
     if (!canSave || saving) return;
     setSaving(true);
     setError(null);
-    setJustSaved(false);
+    setLastSaved(null);
     try {
       const payload: Record<string, unknown> = {
         track,
@@ -150,6 +155,7 @@ export function DorTool({
         scores: answers,
         etaHours: etaHours.trim() ? Number(etaHours) : undefined,
         etaDate: etaDate.trim() || undefined,
+        notes: notes.trim() || undefined,
       };
       if (projectMode === 'existing' && appId) payload.appId = appId;
       else payload.projectName = resolvedProjectName;
@@ -168,7 +174,7 @@ export function DorTool({
         return;
       }
       setHistory((prev) => [json.assessment as DorAssessment, ...prev]);
-      setJustSaved(true);
+      setLastSaved(json.assessment as DorAssessment);
     } catch {
       setError('Network error — please try again.');
     } finally {
@@ -387,6 +393,28 @@ export function DorTool({
               ))}
             </div>
           </Card>
+
+          {/* Final thoughts */}
+          <Card t={t}>
+            <FieldLabel t={t}>
+              <MessageSquare size={11} style={{ marginRight: 6, verticalAlign: '-1px' }} />
+              Final thoughts
+            </FieldLabel>
+            <p style={{ margin: '6px 0 10px', fontSize: 12.5, color: t.textSecondary }}>
+              Optional — context, caveats, or what the team should know. Appears on the shared link.
+            </p>
+            <textarea
+              value={notes}
+              onChange={(e) => {
+                setNotes(e.currentTarget.value);
+                setLastSaved(null);
+              }}
+              placeholder="e.g. WBS is strong, but the PRD's success KPIs have no targets yet — flagged to PM."
+              rows={4}
+              className="dor-focus"
+              style={{ ...inputStyle(t), resize: 'vertical', minHeight: 88, lineHeight: 1.5 }}
+            />
+          </Card>
         </div>
 
         {/* ── Right column: verdict + ETA + save (sticky on desktop) ────── */}
@@ -445,12 +473,7 @@ export function DorTool({
                 {error}
               </p>
             ) : null}
-            {justSaved && !error ? (
-              <p style={{ margin: 0, fontSize: 12.5, color: t.success, textAlign: 'center' }}>
-                Saved to the team history. Use <strong style={{ fontWeight: 600 }}>Clear</strong> to
-                start another.
-              </p>
-            ) : null}
+            {lastSaved && !error ? <SavedShareBox t={t} assessment={lastSaved} /> : null}
           </div>
         </aside>
       </div>
@@ -1146,6 +1169,11 @@ function HistoryRow({ t, row }: { t: SwatchTheme; row: DorAssessment }): ReactNo
             {row.project_name}
           </span>
           <TrackChip t={t} track={row.track} />
+          {row.notes ? (
+            <span title={row.notes} style={{ display: 'inline-flex', alignItems: 'center', color: t.textDisabled }}>
+              <MessageSquare size={12} />
+            </span>
+          ) : null}
         </div>
         <p style={{ margin: '2px 0 0', fontSize: 12.5, color: t.textSecondary }}>
           {row.designer_name} · {formatDate(row.created_at)}
@@ -1163,6 +1191,78 @@ function HistoryRow({ t, row }: { t: SwatchTheme; row: DorAssessment }): ReactNo
           </span>
         ) : null}
       </div>
+      {row.share_token ? <CopyLinkButton t={t} token={row.share_token} compact /> : null}
+    </div>
+  );
+}
+
+function CopyLinkButton({
+  t,
+  token,
+  compact,
+}: {
+  t: SwatchTheme;
+  token: string;
+  compact?: boolean;
+}): ReactNode {
+  const [copied, setCopied] = useState(false);
+  async function copy(): Promise<void> {
+    const url = `${window.location.origin}/shared/dor/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard blocked (e.g. insecure context) — fall back to a manual prompt.
+      window.prompt('Copy this share link:', url);
+      return;
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      title="Copy public read-only link"
+      className="dor-focus"
+      style={{
+        flexShrink: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        height: 30,
+        padding: compact ? '0 10px' : '0 14px',
+        borderRadius: 999,
+        border: `1px solid ${copied ? t.success : t.borderVisible}`,
+        background: 'transparent',
+        color: copied ? t.success : t.textSecondary,
+        fontFamily: editorialFonts.body,
+        fontSize: 12,
+        fontWeight: 500,
+        cursor: 'pointer',
+        transition: 'border-color 120ms ease-out, color 120ms ease-out',
+      }}
+    >
+      {copied ? <Check size={12} /> : <Link2 size={12} />}
+      {copied ? 'Copied' : compact ? 'Link' : 'Copy link'}
+    </button>
+  );
+}
+
+function SavedShareBox({ t, assessment }: { t: SwatchTheme; assessment: DorAssessment }): ReactNode {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+      <p style={{ margin: 0, fontSize: 12.5, color: t.success, textAlign: 'center' }}>
+        Saved to the team history.
+      </p>
+      {assessment.share_token ? (
+        <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <CopyLinkButton t={t} token={assessment.share_token} />
+        </div>
+      ) : null}
+      <p style={{ margin: 0, fontSize: 11.5, color: t.textSecondary, textAlign: 'center', lineHeight: 1.5 }}>
+        Anyone with the link can view it (read-only). Use{' '}
+        <strong style={{ fontWeight: 600 }}>Clear</strong> to start another.
+      </p>
     </div>
   );
 }
