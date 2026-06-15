@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Moon, Search, Sun } from 'lucide-react';
+import { Bell, ClipboardCheck, Moon, Search, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
@@ -106,6 +106,30 @@ export function DashboardTopNav({
             Unicorn Studio
           </span>
         </Link>
+        {profile.role === 'agency' ? (
+          <Link
+            href="/dor"
+            aria-label="Readiness (Definition of Ready)"
+            className="hidden lg:inline-flex"
+            style={{
+              alignItems: 'center',
+              gap: 7,
+              marginLeft: 24,
+              flexShrink: 0,
+              color: t.textSecondary,
+              textDecoration: 'none',
+              fontSize: 13,
+              fontWeight: 500,
+              fontFamily: editorialFonts.body,
+              transition: 'color 120ms ease-out',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = t.textPrimary)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = t.textSecondary)}
+          >
+            <ClipboardCheck size={14} />
+            Readiness
+          </Link>
+        ) : null}
       </div>
 
       <div
