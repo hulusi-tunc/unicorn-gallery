@@ -1,6 +1,6 @@
 import type { Platform } from '@unicorn-studio/gallery-capture';
 import type { ReactNode } from 'react';
-import { IPhoneBezel, IPHONE_BEZEL_ASPECT } from '@/components/iphone-bezel';
+import { DeviceBezel } from '@/components/device-bezel';
 
 export function DeviceFrame({
   platform,
@@ -46,26 +46,14 @@ export function DeviceFrame({
   // The bezel screen scrolls so full-page (taller-than-viewport) captures
   // can be browsed inside the device frame, matching the running app.
   return (
-    <div
+    <DeviceBezel
+      src={src}
+      alt={alt}
+      scrollable
       style={{
         height: 'min(92vh, calc(100vh - 360px))',
-        aspectRatio: IPHONE_BEZEL_ASPECT,
         filter: 'drop-shadow(0 30px 50px rgba(0,0,0,0.45))',
       }}
-    >
-      <IPhoneBezel scrollable>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt={alt}
-          style={{
-            display: 'block',
-            width: '100%',
-            height: 'auto',
-          }}
-          loading="eager"
-        />
-      </IPhoneBezel>
-    </div>
+    />
   );
 }

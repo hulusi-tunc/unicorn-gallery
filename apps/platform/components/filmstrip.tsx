@@ -9,7 +9,7 @@ import type {
   Platform,
 } from '@unicorn-studio/gallery-capture';
 import type { ReactNode } from 'react';
-import { IPHONE_BEZEL_ASPECT, IPhoneBezel } from '@/components/iphone-bezel';
+import { DeviceBezel } from '@/components/device-bezel';
 import { cn } from '@/lib/cn';
 import { imageHref } from '@/lib/image-href';
 
@@ -90,31 +90,18 @@ function FilmstripCell({
       title={frame.name}
     >
       {isMobile ? (
-        <div
+        <DeviceBezel
+          src={imageHref(frame.image)}
+          alt={frame.name}
           style={{
             height: MOBILE_CELL_HEIGHT,
-            aspectRatio: IPHONE_BEZEL_ASPECT,
             transition: 'filter 200ms ease-out, transform 200ms ease-out',
             transform: active ? 'scale(1.04)' : 'scale(1)',
             filter: active
               ? 'drop-shadow(0 6px 12px rgba(15,15,20,0.25))'
               : 'drop-shadow(0 2px 4px rgba(15,15,20,0.12))',
           }}
-        >
-          <IPhoneBezel>
-            <Image
-              src={imageHref(frame.image)}
-              alt={frame.name}
-              fill
-              sizes="96px"
-              style={{
-                objectFit: 'cover',
-                objectPosition: 'top center',
-              }}
-              loading="lazy"
-            />
-          </IPhoneBezel>
-        </div>
+        />
       ) : (
         <div
           style={{ height: WEB_CELL_HEIGHT, width: WEB_CELL_WIDTH, position: 'relative' }}

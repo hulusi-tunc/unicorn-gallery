@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import type {
   ManifestFlow,
@@ -7,7 +6,7 @@ import type {
 } from '@unicorn-studio/gallery-capture';
 import type { ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { IPHONE_BEZEL_ASPECT, IPhoneBezel } from '@/components/iphone-bezel';
+import { DeviceBezel } from '@/components/device-bezel';
 import { UnresolvedBadge } from '@/components/unresolved-badge';
 import { WebCardThumb } from '@/components/web-card-thumb';
 import { imageHref } from '@/lib/image-href';
@@ -113,30 +112,17 @@ function JourneyCard({
         ) : null}
 
         {isMobile ? (
-          <div
+          <DeviceBezel
+            src={imageHref(frame.image)}
+            alt={frame.name}
             style={{
               height: MOBILE_CARD_HEIGHT,
-              aspectRatio: IPHONE_BEZEL_ASPECT,
               filter:
                 'drop-shadow(0 18px 32px rgba(15,15,20,0.18)) drop-shadow(0 6px 12px rgba(15,15,20,0.10))',
               transition: 'filter 220ms cubic-bezier(0.165, 0.84, 0.44, 1)',
             }}
             className="group-hover:[filter:drop-shadow(0_28px_44px_rgba(15,15,20,0.28))_drop-shadow(0_8px_14px_rgba(15,15,20,0.14))] dark:[filter:drop-shadow(0_18px_32px_rgba(0,0,0,0.5))_drop-shadow(0_6px_12px_rgba(0,0,0,0.3))] dark:group-hover:[filter:drop-shadow(0_28px_44px_rgba(0,0,0,0.65))_drop-shadow(0_8px_14px_rgba(0,0,0,0.4))]"
-          >
-            <IPhoneBezel>
-              <Image
-                src={imageHref(frame.image)}
-                alt={frame.name}
-                fill
-                sizes="240px"
-                style={{
-                  objectFit: 'cover',
-                  objectPosition: 'top center',
-                }}
-                loading="lazy"
-              />
-            </IPhoneBezel>
-          </div>
+          />
         ) : (
           <WebCardThumb
             src={imageHref(frame.image)}

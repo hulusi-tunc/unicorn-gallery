@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
-import { IPHONE_BEZEL_ASPECT, IPhoneBezel } from '@/components/iphone-bezel';
+import { DeviceBezel } from '@/components/device-bezel';
 import {
   Tooltip,
   TooltipContent,
@@ -272,35 +272,22 @@ function PreviewArea({
   if (isMobile) {
     return (
       <div style={stageBg}>
-        <div
+        <DeviceBezel
+          src={app.preview_image_url}
+          alt={app.name}
           style={{
             position: 'absolute',
             left: '50%',
             top: '52%',
             transform: 'translate(-50%, -50%)',
-            // Bezel fills 88% of card height; width is derived from aspect.
+            // Bezel fills 88% of card height; width derives from the frame aspect.
             height: '88%',
-            aspectRatio: IPHONE_BEZEL_ASPECT,
             filter:
               theme === 'dark'
                 ? 'drop-shadow(0 22px 36px rgba(0,0,0,0.55))'
                 : 'drop-shadow(0 22px 40px rgba(15,15,20,0.22))',
           }}
-        >
-          <IPhoneBezel>
-            <Image
-              src={app.preview_image_url}
-              alt={app.name}
-              fill
-              sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-              style={{
-                objectFit: 'cover',
-                objectPosition: 'top center',
-              }}
-              loading="lazy"
-            />
-          </IPhoneBezel>
-        </div>
+        />
       </div>
     );
   }

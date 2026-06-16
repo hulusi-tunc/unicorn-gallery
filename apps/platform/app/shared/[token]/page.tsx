@@ -2,7 +2,7 @@ import { Camera } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { ManifestFlow, ManifestFrame, Platform } from '@unicorn-studio/gallery-capture';
-import { IPHONE_BEZEL_RATIO, IPhoneBezel } from '@/components/iphone-bezel';
+import { DeviceBezel } from '@/components/device-bezel';
 import { WebCardThumb } from '@/components/web-card-thumb';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { imageHref } from '@/lib/image-href';
@@ -283,25 +283,19 @@ function ReadonlyCard({
 
   if (isMobile) {
     const height = MOBILE_CARD_HEIGHT;
-    const width = Math.round(height * IPHONE_BEZEL_RATIO);
     return (
       <div className="flex shrink-0 flex-col items-center gap-2">
         <span className="font-mono text-[10px] tracking-[0.08em] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
           {String(step).padStart(2, '0')}
         </span>
-        <IPhoneBezel width={width} height={height}>
-          {src ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={src}
-              alt={frame.name}
-              className="h-full w-full object-cover"
-              draggable={false}
-            />
-          ) : (
-            <div className="h-full w-full bg-[oklch(0.93_0.005_260)] dark:bg-[oklch(0.20_0.008_260)]" />
-          )}
-        </IPhoneBezel>
+        {src ? (
+          <DeviceBezel src={src} alt={frame.name} style={{ height }} />
+        ) : (
+          <div
+            style={{ height, aspectRatio: '450 / 920' }}
+            className="shrink-0 rounded-[18%] bg-[oklch(0.93_0.005_260)] dark:bg-[oklch(0.20_0.008_260)]"
+          />
+        )}
       </div>
     );
   }
