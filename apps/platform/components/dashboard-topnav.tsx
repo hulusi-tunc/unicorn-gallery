@@ -108,7 +108,7 @@ export function DashboardTopNav({
         </Link>
         {profile.role === 'agency' ? (
           <Link
-            href="/dor"
+            href="/dor/team"
             aria-label="Readiness (Definition of Ready)"
             className="hidden lg:inline-flex"
             style={{

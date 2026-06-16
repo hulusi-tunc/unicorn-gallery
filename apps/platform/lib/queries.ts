@@ -1104,6 +1104,8 @@ export async function listDorAssessments(options?: {
   let query = supabase
     .from('dor_assessments')
     .select('*')
+    // Anonymous public-calculator submissions never appear in team history.
+    .eq('is_public', false)
     .order('created_at', { ascending: false })
     .limit(options?.limit ?? 100);
   if (options?.project) query = query.eq('project_name', options.project);

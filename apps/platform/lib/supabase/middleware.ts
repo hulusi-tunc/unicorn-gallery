@@ -15,6 +15,11 @@ const PUBLIC_PATHS = [
   '/api/dev',
   '/api/sign-up',
   '/shared',
+  // Public Definition-of-Ready calculator + its save endpoint. /dor/team is
+  // covered by this prefix but stays gated by the (dashboard) layout + an
+  // agency check in the page; the GET /api/dor handler enforces agency too.
+  '/dor',
+  '/api/dor',
 ];
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {

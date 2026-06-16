@@ -22,6 +22,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { UnicornLogo } from '@/components/brand/unicorn-logo';
 import { useTheme } from '@/components/providers/theme-provider';
 import type { DorAssessment } from '@/lib/db';
 import {
@@ -52,16 +53,19 @@ export interface DorAppOption {
 const STICKY_TOP = 76; // topnav (60) + breathing room.
 
 export function DorTool({
+  mode = 'team',
   apps,
   initialHistory,
   designerName: initialDesigner,
 }: {
+  mode?: 'public' | 'team';
   apps: DorAppOption[];
   initialHistory: DorAssessment[];
   designerName: string;
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
+  const isPublic = mode === 'public';
 
   const [track, setTrack] = useState<Track>('ai');
   const [projectMode, setProjectMode] = useState<'existing' | 'new'>(
@@ -151,7 +155,8 @@ export function DorTool({
         notes: notes.trim() || undefined,
         sectionNotes,
       };
-      if (projectMode === 'existing' && appId) payload.appId = appId;
+      if (isPublic) payload.public = true;
+      if (!isPublic && projectMode === 'existing' && appId) payload.appId = appId;
       else payload.projectName = resolvedProjectName;
 
       const res = await fetch('/api/dor', {
@@ -189,6 +194,14 @@ export function DorTool({
     >
       {/* Header */}
       <header style={{ marginBottom: 32 }}>
+        {isPublic ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+            <UnicornLogo variant="mark" height={20} color={t.accent} />
+            <span style={{ fontFamily: editorialFonts.display, fontSize: 14, fontWeight: 600, color: t.textDisplay }}>
+              Unicorn Studio
+            </span>
+          </div>
+        ) : null}
         <p style={labelStyle(t)}>
           <ClipboardCheck size={11} style={{ marginRight: 6, verticalAlign: '-1px' }} />
           Definition of Ready
@@ -202,12 +215,22 @@ export function DorTool({
             color: t.textDisplay,
           }}
         >
-          Readiness self-check
+          Readiness check
         </h1>
         <p style={{ margin: '8px 0 0', fontSize: 14, color: t.textSecondary, maxWidth: 620 }}>
-          Score the PM handoff before you start designing. You clear at{' '}
-          <strong style={{ color: t.textPrimary }}>{CLEAR_THRESHOLD.toFixed(1)}</strong> with every
-          mandatory item complete — only then can you commit an ETA.
+          {isPublic ? (
+            <>
+              Score a PRD / WBS handoff before design starts. Free, no sign-up — clear at{' '}
+              <strong style={{ color: t.textPrimary }}>{CLEAR_THRESHOLD.toFixed(1)}</strong> and your
+              result gets a shareable link.
+            </>
+          ) : (
+            <>
+              Score the PM handoff before you start designing. You clear at{' '}
+              <strong style={{ color: t.textPrimary }}>{CLEAR_THRESHOLD.toFixed(1)}</strong> with every
+              mandatory item complete — only then can you commit an ETA.
+            </>
+          )}
         </p>
       </header>
 
@@ -242,54 +265,7 @@ export function DorTool({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
                 <FieldLabel t={t}>Project</FieldLabel>
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    gap: 4,
-                    marginTop: 10,
-                    padding: 3,
-                    borderRadius: 999,
-                    background: t.surfaceInk,
-                    border: `1px solid ${t.border}`,
-                  }}
-                >
-                  <Segment
-                    t={t}
-                    active={projectMode === 'existing'}
-                    disabled={apps.length === 0}
-                    onClick={() => setProjectMode('existing')}
-                  >
-                    Existing project
-                  </Segment>
-                  <Segment
-                    t={t}
-                    active={projectMode === 'new'}
-                    onClick={() => setProjectMode('new')}
-                  >
-                    New / external
-                  </Segment>
-                </div>
-
-                {projectMode === 'existing' ? (
-                  apps.length > 0 ? (
-                    <select
-                      value={appId}
-                      onChange={(e) => setAppId(e.currentTarget.value)}
-                      className="dor-focus"
-                      style={{ ...inputStyle(t), marginTop: 10, cursor: 'pointer' }}
-                    >
-                      {apps.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} · {a.platform}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p style={{ margin: '10px 0 0', fontSize: 13, color: t.textSecondary }}>
-                      No gallery projects yet — switch to “New / external”.
-                    </p>
-                  )
-                ) : (
+                {isPublic ? (
                   <input
                     type="text"
                     value={customProject}
@@ -298,11 +274,71 @@ export function DorTool({
                     className="dor-focus"
                     style={{ ...inputStyle(t), marginTop: 10 }}
                   />
+                ) : (
+                  <>
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        gap: 4,
+                        marginTop: 10,
+                        padding: 3,
+                        borderRadius: 999,
+                        background: t.surfaceInk,
+                        border: `1px solid ${t.border}`,
+                      }}
+                    >
+                      <Segment
+                        t={t}
+                        active={projectMode === 'existing'}
+                        disabled={apps.length === 0}
+                        onClick={() => setProjectMode('existing')}
+                      >
+                        Existing project
+                      </Segment>
+                      <Segment
+                        t={t}
+                        active={projectMode === 'new'}
+                        onClick={() => setProjectMode('new')}
+                      >
+                        New / external
+                      </Segment>
+                    </div>
+
+                    {projectMode === 'existing' ? (
+                      apps.length > 0 ? (
+                        <select
+                          value={appId}
+                          onChange={(e) => setAppId(e.currentTarget.value)}
+                          className="dor-focus"
+                          style={{ ...inputStyle(t), marginTop: 10, cursor: 'pointer' }}
+                        >
+                          {apps.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} · {a.platform}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p style={{ margin: '10px 0 0', fontSize: 13, color: t.textSecondary }}>
+                          No gallery projects yet — switch to “New / external”.
+                        </p>
+                      )
+                    ) : (
+                      <input
+                        type="text"
+                        value={customProject}
+                        onChange={(e) => setCustomProject(e.currentTarget.value)}
+                        placeholder="Project name"
+                        className="dor-focus"
+                        style={{ ...inputStyle(t), marginTop: 10 }}
+                      />
+                    )}
+                  </>
                 )}
               </div>
 
               <div>
-                <FieldLabel t={t}>Designer</FieldLabel>
+                <FieldLabel t={t}>{isPublic ? 'Your name' : 'Designer'}</FieldLabel>
                 <input
                   type="text"
                   value={designerName}
@@ -469,12 +505,15 @@ export function DorTool({
                 {error}
               </p>
             ) : null}
-            {lastSaved && !error ? <SavedShareBox t={t} assessment={lastSaved} /> : null}
+            {lastSaved && !error ? (
+              <SavedShareBox t={t} assessment={lastSaved} isPublic={isPublic} />
+            ) : null}
           </div>
         </aside>
       </div>
 
-      {/* ── Team history ──────────────────────────────────────────────── */}
+      {/* ── Team history (internal tool only) ─────────────────────────── */}
+      {!isPublic ? (
       <section style={{ marginTop: 44 }}>
         <h2
           style={{
@@ -511,6 +550,7 @@ export function DorTool({
           </div>
         )}
       </section>
+      ) : null}
     </div>
   );
 }
@@ -1257,11 +1297,19 @@ function CopyLinkButton({
   );
 }
 
-function SavedShareBox({ t, assessment }: { t: SwatchTheme; assessment: DorAssessment }): ReactNode {
+function SavedShareBox({
+  t,
+  assessment,
+  isPublic,
+}: {
+  t: SwatchTheme;
+  assessment: DorAssessment;
+  isPublic: boolean;
+}): ReactNode {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
       <p style={{ margin: 0, fontSize: 12.5, color: t.success, textAlign: 'center' }}>
-        Saved to the team history.
+        {isPublic ? 'Saved — here’s your shareable link.' : 'Saved to the team history.'}
       </p>
       {assessment.share_token ? (
         <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>

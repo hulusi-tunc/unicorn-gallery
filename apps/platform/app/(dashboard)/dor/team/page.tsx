@@ -5,11 +5,11 @@ import {
   listDorAssessments,
   listVisibleApps,
 } from '@/lib/queries';
-import { DorTool, type DorAppOption } from './dor-tool';
+import { DorTool, type DorAppOption } from '@/components/dor-tool';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DorPage(): Promise<ReactNode> {
+export default async function DorTeamPage(): Promise<ReactNode> {
   const profile = await getCurrentProfile();
   if (!profile) redirect('/sign-in');
   if (profile.role !== 'agency') redirect('/');
@@ -27,6 +27,7 @@ export default async function DorPage(): Promise<ReactNode> {
 
   return (
     <DorTool
+      mode="team"
       apps={appOptions}
       initialHistory={history}
       designerName={profile.name ?? profile.email}

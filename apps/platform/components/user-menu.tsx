@@ -117,7 +117,7 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/dor">
+              <Link href="/dor/team">
                 <ClipboardCheck size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
                 Readiness (DoR)
               </Link>

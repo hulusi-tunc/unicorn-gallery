@@ -72,7 +72,7 @@ export default async function HomePage({
         </div>
         {isAgency ? (
           <Link
-            href="/dor"
+            href="/dor/team"
             className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[oklch(0.5_0.22_254)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[oklch(0.42_0.22_254)] dark:bg-[oklch(0.6_0.21_254)] dark:text-[oklch(0.98_0.005_260)] dark:hover:bg-[oklch(0.66_0.2_254)]"
           >
             <ClipboardCheck size={15} />

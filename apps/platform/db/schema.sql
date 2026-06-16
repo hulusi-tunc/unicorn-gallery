@@ -568,6 +568,9 @@ create table if not exists public.dor_assessments (
   section_notes jsonb not null default '{}'::jsonb,
   -- Unguessable token for the public read-only share page (/shared/dor/<token>).
   share_token text,
+  -- true = anonymous submission from the public /dor calculator (kept OUT of the
+  -- team history). false = internal team assessment by an agency member.
+  is_public boolean not null default false,
   created_at timestamptz not null default now()
 );
 -- ETA is tracked in hours. Earlier builds used eta_days; migrate the column
@@ -578,6 +581,7 @@ alter table public.dor_assessments drop column if exists eta_days;
 alter table public.dor_assessments add column if not exists notes text;
 alter table public.dor_assessments add column if not exists section_notes jsonb not null default '{}'::jsonb;
 alter table public.dor_assessments add column if not exists share_token text;
+alter table public.dor_assessments add column if not exists is_public boolean not null default false;
 create unique index if not exists dor_assessments_share_token_key on public.dor_assessments(share_token);
 create index if not exists dor_assessments_created_idx on public.dor_assessments(created_at desc);
 create index if not exists dor_assessments_app_idx on public.dor_assessments(app_id);

@@ -178,6 +178,8 @@ export interface DorAssessment {
   section_notes: Record<string, string>;
   /** Unguessable token for the public read-only share page. */
   share_token: string | null;
+  /** true = anonymous submission from the public calculator (excluded from team history). */
+  is_public: boolean;
   created_at: string;
 }
 
