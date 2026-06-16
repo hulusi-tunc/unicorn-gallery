@@ -209,6 +209,32 @@ export async function ingestCapture({
     buildId = build.id;
   }
 
+  // 2a. Persist the flow hierarchy — INCLUDING empty grouping flows that carry
+  // no frames of their own (e.g. "ADMIN" holding only sub-flows). The
+  // frames-derived tree can't represent a frameless container, so without this
+  // its children would flatten to the top level. Accumulate across chunked
+  // batches of the same build (each batch carries its frames' ancestors).
+  {
+    const incoming = rewritten.flows.map((f) => ({
+      id: f.id,
+      name: f.name,
+      parentFlowId: f.parentFlowId ?? null,
+      position: f.position ?? null,
+    }));
+    const { data: curRow } = await admin
+      .from('builds')
+      .select('flow_tree')
+      .eq('id', buildId)
+      .maybeSingle();
+    const merged = new Map<string, (typeof incoming)[number]>();
+    for (const f of (curRow?.flow_tree ?? []) as typeof incoming) merged.set(f.id, f);
+    for (const f of incoming) merged.set(f.id, f);
+    await admin
+      .from('builds')
+      .update({ flow_tree: Array.from(merged.values()) })
+      .eq('id', buildId);
+  }
+
   // 2b. Snapshot per-build frame state into `frame_versions` with diff vs
   // the previous build. Upsert per-frame so chunked uploads accumulate
   // (each chunk fills in more rows for the same build_id).

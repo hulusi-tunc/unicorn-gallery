@@ -740,6 +740,29 @@ export const getManifestForApp = cache(async (
     g.frames.push(f);
   }
 
+  // Inject empty grouping flows (containers that hold sub-flows but no frames
+  // of their own) from the build's stored flow tree, so children stay nested
+  // under them instead of falling back to the top level. Only ancestors of
+  // flows that actually have frames are added, so stale containers never
+  // resurface.
+  const treeMeta = (latestBuild?.flow_tree ?? []) as Array<{
+    id: string;
+    name: string;
+    parentFlowId: string | null;
+  }>;
+  if (treeMeta.length > 0) {
+    const metaById = new Map(treeMeta.map((m) => [m.id, m]));
+    for (const g of Array.from(byFlow.values())) {
+      let pid = g.parentFlowId;
+      while (pid && !byFlow.has(pid)) {
+        const m = metaById.get(pid);
+        if (!m) break;
+        byFlow.set(pid, { id: m.id, name: m.name, parentFlowId: m.parentFlowId, frames: [] });
+        pid = m.parentFlowId;
+      }
+    }
+  }
+
   return {
     projectId: '',
     buildSha: latestBuild?.sha ?? '',
@@ -797,11 +820,16 @@ async function getManifestForBuild(
     (async () => {
       const { data } = await supabase
         .from('builds')
-        .select('sha, captured_at, platform')
+        .select('sha, captured_at, platform, flow_tree')
         .eq('id', buildId)
         .eq('app_id', appId)
         .maybeSingle();
-      return data as { sha: string; captured_at: string; platform: string } | null;
+      return data as {
+        sha: string;
+        captured_at: string;
+        platform: string;
+        flow_tree?: Array<{ id: string; name: string; parentFlowId: string | null; position: number | null }> | null;
+      } | null;
     })(),
   ]);
   const versions = (versionsResult.data ?? []) as Array<{
@@ -876,6 +904,33 @@ async function getManifestForBuild(
       image: v.image_url,
       position: s?.frame_position ?? frameOrderCounter++,
     });
+  }
+
+  // Inject empty grouping flows from this build's stored flow tree (see
+  // getManifestForApp) so frameless containers keep their children nested.
+  const treeMeta = (build?.flow_tree ?? []) as Array<{
+    id: string;
+    name: string;
+    parentFlowId: string | null;
+    position: number | null;
+  }>;
+  if (treeMeta.length > 0) {
+    const metaById = new Map(treeMeta.map((m) => [m.id, m]));
+    for (const g of Array.from(byFlow.values())) {
+      let pid = g.parentFlowId;
+      while (pid && !byFlow.has(pid)) {
+        const m = metaById.get(pid);
+        if (!m) break;
+        byFlow.set(pid, {
+          id: m.id,
+          name: m.name,
+          parentFlowId: m.parentFlowId,
+          position: m.position,
+          frames: [],
+        });
+        pid = m.parentFlowId;
+      }
+    }
   }
 
   const flows = Array.from(byFlow.values())

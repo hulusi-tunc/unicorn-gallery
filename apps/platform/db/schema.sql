@@ -172,6 +172,12 @@ alter table public.builds add column if not exists version int;
 alter table public.builds add column if not exists message text;
 create unique index if not exists builds_app_version_uq
   on public.builds(app_id, version) where version is not null;
+-- Full flow hierarchy for this build, INCLUDING grouping flows that hold no
+-- frames of their own (e.g. "ADMIN" containing sub-flows). Frames alone can't
+-- represent an empty container, so we'd otherwise lose the nesting and flatten
+-- its children to the top level. Accumulated across chunked upload batches.
+-- Shape: [{ id, name, parentFlowId, position }]
+alter table public.builds add column if not exists flow_tree jsonb;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- frame_versions — per-build snapshot of every frame. Powers version history

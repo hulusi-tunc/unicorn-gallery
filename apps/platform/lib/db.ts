@@ -100,6 +100,17 @@ export interface Build {
   version: number | null;
   /** Optional human note shown in version history. */
   message: string | null;
+  /**
+   * Full flow hierarchy incl. empty grouping flows (containers with no frames
+   * of their own). Lets the gallery keep sub-flows nested under containers the
+   * frame-derived tree can't represent. Null on legacy / pre-migration rows.
+   */
+  flow_tree?: Array<{
+    id: string;
+    name: string;
+    parentFlowId: string | null;
+    position: number | null;
+  }> | null;
 }
 
 export interface Frame {
