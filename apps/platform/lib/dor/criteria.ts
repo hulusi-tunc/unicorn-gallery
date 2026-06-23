@@ -94,7 +94,6 @@ export const SHARED_CRITERIA: readonly Criterion[] = [
       { id: 'users', title: 'Target users are defined', description: 'Who it’s for — roles or personas.' },
       { id: 'features', title: 'Features listed & prioritised', description: 'The feature set with Must / Should / Could / Won’t (MoSCoW).' },
       { id: 'scope', title: 'Out-of-scope & V2 are stated', description: 'What we’re not building now, and what’s deferred to later.' },
-      { id: 'success', title: 'Success metrics have targets', description: 'KPIs with actual numbers — not “to be defined”.' },
     ],
   },
   {
@@ -107,7 +106,6 @@ export const SHARED_CRITERIA: readonly Criterion[] = [
       { id: 'coverage', title: 'Every feature has a WBS item', description: 'Nothing in the PRD is missing from the breakdown.' },
       { id: 'acceptance', title: 'Each item has acceptance criteria', description: 'Every story says what “done” looks like.' },
       { id: 'grouped', title: 'Grouped by epic / flow', description: 'Organised, not a flat dump.' },
-      { id: 'granularity', title: 'Items are sized to design from', description: 'Each maps to a screen/flow — no “TBD” or “misc”.' },
     ],
   },
   {
