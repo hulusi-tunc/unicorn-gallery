@@ -17,6 +17,7 @@ import {
 import { assignStaff } from '@/lib/actions/assign-staff';
 import { ArchiveAppButton } from '@/components/archive-app-button';
 import { DownloadPdfButton } from '@/components/download-pdf-button';
+import { DownloadPngsButton } from '@/components/download-pngs-button';
 import { EditProjectButton } from '@/components/edit-project-button';
 import { ShareButton } from '@/components/share-button';
 import { VersionSwitcher } from '@/components/version-switcher';
@@ -156,6 +157,7 @@ export function AppHeader({
               eligibleCustomers={eligibleCustomers}
             />
             <DownloadPdfButton appSlug={app.slug} appName={app.name} builds={builds} />
+            <DownloadPngsButton appSlug={app.slug} appName={app.name} builds={builds} />
             <ArchiveAppButton appSlug={app.slug} appName={app.name} />
           </>
         ) : null}
