@@ -66,7 +66,42 @@ async function loadSharedApp(
     return { app: app as AppRow, manifest: null };
   }
 
-  const manifest = framesToManifest(frames as Frame[], app as AppRow);
+  // Scope to the LATEST visible version — mirror getManifestForApp's default.
+  // The `frames` table keeps orphan rows from earlier versions (so old-version
+  // views can still render), so without this the public link merges every
+  // version into one confusing list. Filter to the current build's frames.
+  const { data: latestBuild } = await admin
+    .from('builds')
+    .select('id')
+    .eq('app_id', app.id)
+    .eq('is_visible', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let visibleFrames = frames as Frame[];
+  if (latestBuild) {
+    const { data: keyRows } = await admin
+      .from('frame_versions')
+      .select('flow_id, frame_id')
+      .eq('build_id', latestBuild.id);
+    const keys = new Set(
+      (keyRows ?? []).map((r) => `${r.flow_id}::${r.frame_id}`),
+    );
+    // Fall back to all frames when frame_versions has no rows (legacy uploads),
+    // so the link never goes blank — same guard as the internal viewer.
+    if (keys.size > 0) {
+      visibleFrames = visibleFrames.filter((f) =>
+        keys.has(`${f.flow_id}::${f.frame_id}`),
+      );
+    }
+  }
+
+  if (visibleFrames.length === 0) {
+    return { app: app as AppRow, manifest: null };
+  }
+
+  const manifest = framesToManifest(visibleFrames, app as AppRow);
   return { app: app as AppRow, manifest };
 }
 
