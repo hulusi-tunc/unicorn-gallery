@@ -10,7 +10,7 @@ export default async function SignUpPage(): Promise<ReactNode> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect('/');
+  if (user) redirect('/apps');
 
   return <SignUpClient />;
 }

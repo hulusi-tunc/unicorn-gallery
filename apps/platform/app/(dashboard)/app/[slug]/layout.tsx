@@ -12,6 +12,7 @@ import {
   listAppCustomers,
   listBuildsForApp,
   listEligibleCustomersForApp,
+  listProjectMembers,
 } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,7 @@ export default async function AppLayout({
     eligibleCustomers,
     builds,
     manifest,
+    members,
   ] = await Promise.all([
     getCurrentProfile(),
     listAgencyProfiles(),
@@ -46,6 +48,7 @@ export default async function AppLayout({
     listEligibleCustomersForApp(app.id),
     listBuildsForApp(app.id),
     getManifestForApp(app.id),
+    listProjectMembers(app.id),
   ]);
   // Any agency member can change Designer / PM. Customers see chips but no dropdown.
   const canEdit = profile?.role === 'agency';
@@ -80,6 +83,13 @@ export default async function AppLayout({
     }
   }
 
+  const flowCount = manifest
+    ? manifest.flows.filter((f) => f.frames.length > 0).length
+    : 0;
+  const frameCount = manifest
+    ? manifest.flows.reduce((n, f) => n + f.frames.length, 0)
+    : 0;
+
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 60px)' }}>
       <AppHeader
@@ -90,6 +100,9 @@ export default async function AppLayout({
         customers={customers}
         eligibleCustomers={eligibleCustomers}
         builds={builds}
+        members={members}
+        flowCount={flowCount}
+        frameCount={frameCount}
       />
       <VersionBanner />
       <div className="flex flex-1 overflow-hidden">

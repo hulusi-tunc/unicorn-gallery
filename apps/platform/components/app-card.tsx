@@ -2,7 +2,15 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, Pin } from 'lucide-react';
+import {
+  useState,
+  useTransition,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import { DeviceBezel } from '@/components/device-bezel';
 import {
@@ -11,6 +19,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { UserAvatar } from '@/components/user-avatar';
+import { setAppPinned } from '@/lib/actions/favorites';
 import { editorialFonts, getNd } from '@/lib/tokens';
 import type { AppRow, AppRowWithStaff, ProfileLite } from '@/lib/db';
 
@@ -20,18 +29,75 @@ const PLATFORM_LABEL: Record<AppRow['platform'], string> = {
   android: 'Mobile',
 };
 
+/**
+ * Run `fn` while swallowing the event so an in-card control (pin, arrows)
+ * never triggers the wrapping <Link> navigation. We use <span role="button">
+ * rather than <button> because the controls live inside an <a> — a nested
+ * <button> is invalid HTML and warns under React 19 hydration.
+ */
+function press(
+  e: ReactMouseEvent | ReactKeyboardEvent,
+  fn: () => void,
+): void {
+  if ('key' in e && e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  e.stopPropagation();
+  fn();
+}
+
 export function AppCard({
   app,
   unreadCount = 0,
+  previewImages,
+  pinned = false,
 }: {
   app: AppRowWithStaff;
   unreadCount?: number;
+  /**
+   * Ordered screen thumbnails for the hover carousel (one per flow). The first
+   * entry is treated as the resting preview. Falls back to the app's single
+   * preview_image_url when empty.
+   */
+  previewImages?: string[];
+  /** Whether the current user has pinned this app to the top of their grid. */
+  pinned?: boolean;
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
   const [hover, setHover] = useState(false);
   const isMobile = app.platform !== 'web';
   const accent = app.accent_color ?? t.accent;
+
+  // Carousel source: explicit preview set, else the single hero image, else none.
+  const previews =
+    previewImages && previewImages.length > 0
+      ? previewImages
+      : app.preview_image_url
+        ? [app.preview_image_url]
+        : [];
+  const hasCarousel = previews.length > 1;
+  const [index, setIndex] = useState(0);
+  const safeIndex = previews.length > 0 ? index % previews.length : 0;
+  const currentImage = previews[safeIndex] ?? app.preview_image_url ?? null;
+
+  // Pin state is optimistic — flip instantly, reconcile on the server. The
+  // server action revalidates the dashboard so the grid re-sorts on next paint.
+  const [isPinned, setIsPinned] = useState(pinned);
+  const [, startTransition] = useTransition();
+
+  function step(delta: number): void {
+    if (previews.length === 0) return;
+    setIndex((i) => (i + delta + previews.length) % previews.length);
+  }
+
+  function togglePin(): void {
+    const next = !isPinned;
+    setIsPinned(next);
+    startTransition(async () => {
+      const res = await setAppPinned({ appId: app.id, pinned: next });
+      if (res.error) setIsPinned(!next); // revert on failure
+    });
+  }
 
   return (
     <Link
@@ -64,13 +130,21 @@ export function AppCard({
           borderColor: hover ? t.borderVisible : t.border,
         }}
       >
-        <PreviewArea app={app} t={t} accent={accent} isMobile={isMobile} theme={theme} />
+        <PreviewArea
+          app={app}
+          imageUrl={currentImage}
+          t={t}
+          isMobile={isMobile}
+          theme={theme}
+        />
 
+        {/* Platform badge — moved to the bottom-left so the top-right is free
+            for the pin + carousel dots, the way Mobbin clusters them. */}
         <span
           style={{
             position: 'absolute',
-            top: 12,
-            right: 12,
+            bottom: 12,
+            left: 12,
             fontFamily: editorialFonts.mono,
             fontSize: 10,
             fontWeight: 500,
@@ -87,6 +161,45 @@ export function AppCard({
           }}
         >
           {PLATFORM_LABEL[app.platform]}
+        </span>
+
+        {/* Pin / favorite — top-right, always visible so you can pin without
+            hovering. Filled + accent when pinned. */}
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => press(e, togglePin)}
+          onKeyDown={(e) => press(e, togglePin)}
+          aria-pressed={isPinned}
+          aria-label={isPinned ? 'Unpin from top' : 'Pin to top'}
+          title={isPinned ? 'Unpin from top' : 'Pin to top'}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 30,
+            height: 30,
+            cursor: 'pointer',
+            color: isPinned ? accent : t.textPrimary,
+            background:
+              theme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)',
+            backdropFilter: 'blur(10px) saturate(1.6)',
+            WebkitBackdropFilter: 'blur(10px) saturate(1.6)',
+            border: `1px solid ${isPinned ? accent : t.border}`,
+            borderRadius: 999,
+            padding: 0,
+            opacity: hover || isPinned ? 1 : 0,
+            transition: 'opacity 180ms ease-out, color 160ms ease-out, border-color 160ms ease-out',
+          }}
+        >
+          <Pin
+            size={15}
+            fill={isPinned ? 'currentColor' : 'none'}
+            strokeWidth={2}
+          />
         </span>
 
         {unreadCount > 0 ? (
@@ -122,6 +235,32 @@ export function AppCard({
             />
             {unreadCount > 99 ? '99+' : unreadCount} new
           </span>
+        ) : null}
+
+        {/* Carousel arrows — only when there's more than one screen, on hover. */}
+        {hasCarousel ? (
+          <>
+            <CarouselArrow
+              dir="prev"
+              show={hover}
+              theme={theme}
+              t={t}
+              onActivate={() => step(-1)}
+            />
+            <CarouselArrow
+              dir="next"
+              show={hover}
+              theme={theme}
+              t={t}
+              onActivate={() => step(1)}
+            />
+            <DotIndicator
+              count={previews.length}
+              active={safeIndex}
+              show={hover}
+              theme={theme}
+            />
+          </>
         ) : null}
       </div>
 
@@ -175,6 +314,111 @@ export function AppCard({
         <StaffRow designer={app.designer} pm={app.pm} t={t} />
       </div>
     </Link>
+  );
+}
+
+function CarouselArrow({
+  dir,
+  show,
+  theme,
+  t,
+  onActivate,
+}: {
+  dir: 'prev' | 'next';
+  show: boolean;
+  theme: string;
+  t: ReturnType<typeof getNd>;
+  onActivate: () => void;
+}): ReactNode {
+  const Icon = dir === 'prev' ? ChevronLeft : ChevronRight;
+  return (
+    <span
+      role="button"
+      tabIndex={show ? 0 : -1}
+      onClick={(e) => press(e, onActivate)}
+      onKeyDown={(e) => press(e, onActivate)}
+      aria-label={dir === 'prev' ? 'Previous screen' : 'Next screen'}
+      style={{
+        position: 'absolute',
+        top: '50%',
+        [dir === 'prev' ? 'left' : 'right']: 10,
+        transform: `translateY(-50%) translateX(${show ? '0' : dir === 'prev' ? '-4px' : '4px'})`,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 30,
+        height: 30,
+        cursor: 'pointer',
+        color: t.textPrimary,
+        background:
+          theme === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.9)',
+        backdropFilter: 'blur(10px) saturate(1.6)',
+        WebkitBackdropFilter: 'blur(10px) saturate(1.6)',
+        border: `1px solid ${t.border}`,
+        borderRadius: 999,
+        padding: 0,
+        boxShadow: '0 4px 14px -6px rgba(0,0,0,0.35)',
+        opacity: show ? 1 : 0,
+        pointerEvents: show ? 'auto' : 'none',
+        transition: 'opacity 180ms ease-out, transform 180ms cubic-bezier(0.165, 0.84, 0.44, 1)',
+      }}
+    >
+      <Icon size={16} strokeWidth={2.25} />
+    </span>
+  );
+}
+
+function DotIndicator({
+  count,
+  active,
+  show,
+  theme,
+}: {
+  count: number;
+  active: number;
+  show: boolean;
+  theme: string;
+}): ReactNode {
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        bottom: 12,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '5px 8px',
+        borderRadius: 999,
+        background: theme === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.8)',
+        backdropFilter: 'blur(10px) saturate(1.6)',
+        WebkitBackdropFilter: 'blur(10px) saturate(1.6)',
+        opacity: show ? 1 : 0,
+        transition: 'opacity 180ms ease-out',
+      }}
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <span
+          key={i}
+          style={{
+            width: i === active ? 14 : 5,
+            height: 5,
+            borderRadius: 999,
+            background:
+              i === active
+                ? theme === 'dark'
+                  ? 'rgba(255,255,255,0.95)'
+                  : 'rgba(20,20,30,0.9)'
+                : theme === 'dark'
+                  ? 'rgba(255,255,255,0.4)'
+                  : 'rgba(20,20,30,0.3)',
+            transition: 'width 200ms cubic-bezier(0.165, 0.84, 0.44, 1)',
+          }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -241,13 +485,15 @@ function StaffAvatar({
 
 function PreviewArea({
   app,
+  imageUrl,
   t,
   isMobile,
   theme,
 }: {
   app: AppRowWithStaff;
+  /** The screen to show right now (carousel-aware). */
+  imageUrl: string | null;
   t: ReturnType<typeof getNd>;
-  accent: string;
   isMobile: boolean;
   theme: string;
 }): ReactNode {
@@ -265,7 +511,7 @@ function PreviewArea({
     backgroundPosition: '0 0',
   };
 
-  if (!app.preview_image_url) {
+  if (!imageUrl) {
     return <div style={stageBg} />;
   }
 
@@ -273,7 +519,8 @@ function PreviewArea({
     return (
       <div style={stageBg}>
         <DeviceBezel
-          src={app.preview_image_url}
+          key={imageUrl}
+          src={imageUrl}
           alt={app.name}
           style={{
             position: 'absolute',
@@ -316,7 +563,8 @@ function PreviewArea({
         }}
       >
         <Image
-          src={app.preview_image_url}
+          key={imageUrl}
+          src={imageUrl}
           alt={app.name}
           fill
           sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
@@ -330,4 +578,3 @@ function PreviewArea({
     </div>
   );
 }
-

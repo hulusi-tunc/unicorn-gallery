@@ -14,7 +14,7 @@ export default async function ArchivedPage(): Promise<ReactNode> {
   const profile = await getCurrentProfile();
   if (!profile) redirect('/sign-in');
   if (profile.role !== 'agency') {
-    redirect('/');
+    redirect('/apps');
   }
   const apps = await listArchivedApps();
 

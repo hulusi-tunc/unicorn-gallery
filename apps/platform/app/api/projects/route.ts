@@ -1,6 +1,12 @@
 import { nanoid } from 'nanoid';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
+import {
+  type BearerUser,
+  extractBearer,
+  getUserFromBearer,
+  isBearerAuthError,
+} from '@/lib/user-token';
 
 export const runtime = 'nodejs';
 
@@ -57,20 +63,37 @@ export async function GET(request: NextRequest): Promise<Response> {
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 export async function POST(request: NextRequest): Promise<Response> {
-  const setupToken = process.env.SETUP_TOKEN;
-  if (!setupToken) {
-    return NextResponse.json(
-      { error: 'Server is missing SETUP_TOKEN env var.' },
-      { status: 500 },
-    );
+  // Two kinds of caller create projects:
+  //   1. The Capture desktop app, authenticated as a signed-in USER (a Supabase
+  //      access-token JWT). The creator is recorded (created_by) and auto-
+  //      assigned via project_members, so the project appears in their Capture
+  //      dashboard and they can push to it.
+  //   2. Headless flows (snap-bridge `init`, CI), authenticated with the shared
+  //      SETUP_TOKEN. These have no user identity, so no assignment is made —
+  //      the platform UI's staff strip handles staffing afterwards.
+  const provided = extractBearer(request);
+  if (!provided) {
+    return NextResponse.json({ error: 'Missing bearer token.' }, { status: 401 });
   }
 
-  const auth = request.headers.get('authorization') ?? '';
-  const provided = auth.startsWith('Bearer ')
-    ? auth.slice(7).trim()
-    : auth.trim();
-  if (!provided || provided !== setupToken) {
-    return NextResponse.json({ error: 'Invalid setup token.' }, { status: 401 });
+  const setupToken = process.env.SETUP_TOKEN;
+  const isSetupToken = Boolean(setupToken) && provided === setupToken;
+
+  let actor: BearerUser | null = null;
+  if (!isSetupToken) {
+    const resolved = await getUserFromBearer(provided);
+    if (isBearerAuthError(resolved)) {
+      return NextResponse.json({ error: resolved.message }, { status: resolved.status });
+    }
+    // Only studio members (agency) or the owner may create projects. Customers
+    // have no Capture surface and can't write.
+    if (resolved.role !== 'agency' && !resolved.isOwner) {
+      return NextResponse.json(
+        { error: 'Only studio members can create projects.' },
+        { status: 403 },
+      );
+    }
+    actor = resolved;
   }
 
   let body: { slug?: string; name?: string; platform?: string };
@@ -121,6 +144,26 @@ export async function POST(request: NextRequest): Promise<Response> {
     .eq('slug', slug)
     .maybeSingle();
   if (existing) {
+    // For user-authenticated (Capture) creates, a member may only "reuse" a
+    // slug they're already assigned to — this stops one member from grabbing
+    // another member's project by guessing its slug. The owner can reuse any.
+    if (actor && !actor.isOwner) {
+      const { data: membership } = await admin
+        .from('project_members')
+        .select('app_id')
+        .eq('app_id', existing.id)
+        .eq('user_id', actor.id)
+        .maybeSingle();
+      if (!membership) {
+        return NextResponse.json(
+          {
+            error:
+              "A project with that slug already exists and isn't assigned to you.",
+          },
+          { status: 409 },
+        );
+      }
+    }
     const wasArchived = Boolean(existing.archived_at);
     if (wasArchived) {
       const { error: restoreErr } = await admin
@@ -157,6 +200,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       name,
       platform,
       project_token: projectToken,
+      // Record the creator when a signed-in user created this from Capture.
+      ...(actor ? { created_by: actor.id } : {}),
     })
     .select('id, slug, name, platform')
     .single();
@@ -166,6 +211,23 @@ export async function POST(request: NextRequest): Promise<Response> {
       { error: `Insert failed: ${error.message}` },
       { status: 500 },
     );
+  }
+
+  // Auto-assign the creator so the project appears in their Capture dashboard.
+  // Members only — the owner already sees every project, so no row is needed.
+  if (actor && !actor.isOwner) {
+    const { error: memberErr } = await admin
+      .from('project_members')
+      .upsert(
+        { app_id: data.id, user_id: actor.id, assigned_by: actor.id },
+        { onConflict: 'app_id,user_id', ignoreDuplicates: true },
+      );
+    if (memberErr) {
+      return NextResponse.json(
+        { error: `Project created but assignment failed: ${memberErr.message}` },
+        { status: 500 },
+      );
+    }
   }
 
   return NextResponse.json({

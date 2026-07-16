@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '@/lib/queries';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
+import { STUDIO_OWNER_EMAIL } from '@/lib/user-token';
 
-const HARDCODED_FOUNDER = 'hulusitunc1@gmail.com';
+const HARDCODED_FOUNDER = STUDIO_OWNER_EMAIL;
 
 async function requireAgency(): Promise<{ id: string } | { error: string }> {
   const profile = await getCurrentProfile();

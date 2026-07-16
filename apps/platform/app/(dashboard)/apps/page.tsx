@@ -3,8 +3,31 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AppCard } from '@/components/app-card';
 import { EmptyState } from '@/components/empty-state';
-import { getCurrentProfile, getUnreadCountsByApp, listVisibleApps } from '@/lib/queries';
+import {
+  getCurrentProfile,
+  getFavoriteAppIds,
+  getPreviewFramesByApp,
+  getUnreadCountsByApp,
+  listVisibleApps,
+} from '@/lib/queries';
 import type { AppRowWithStaff } from '@/lib/db';
+
+/** Dashboard hover-carousel cap — keep dots legible. Mirrors getPreviewFramesByApp. */
+const MAX_PREVIEWS = 6;
+
+/**
+ * Ordered preview set for a card: the curated hero image first, then one
+ * opening frame per flow, de-duped. Drives the hover carousel + dot count.
+ */
+function previewsFor(
+  app: AppRowWithStaff,
+  byApp: Map<string, string[]>,
+): string[] {
+  const ordered = [app.preview_image_url, ...(byApp.get(app.id) ?? [])].filter(
+    (u): u is string => Boolean(u),
+  );
+  return Array.from(new Set(ordered)).slice(0, MAX_PREVIEWS);
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -38,15 +61,16 @@ function applyFilter(
   }
 }
 
-export default async function HomePage({
+export default async function AppsPage({
   searchParams,
 }: {
   searchParams: Promise<{ staff?: string }>;
 }): Promise<ReactNode> {
   const profile = (await getCurrentProfile())!; // layout already redirected if null
-  const [apps, unreadByApp] = await Promise.all([
+  const [apps, unreadByApp, favorites] = await Promise.all([
     listVisibleApps(),
     getUnreadCountsByApp(profile.id),
+    getFavoriteAppIds(profile.id),
   ]);
   const isAgency = profile.role === 'agency';
 
@@ -58,6 +82,14 @@ export default async function HomePage({
       ? (params.staff as StaffFilter)
       : 'all';
   const filtered = applyFilter(apps, filter, profile.id);
+
+  // Pinned apps float to the top, preserving newest-first order within each
+  // group (Array.prototype.sort is stable). Per-user — favorites is this
+  // viewer's set only.
+  const ordered = [...filtered].sort(
+    (a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id)),
+  );
+  const previewByApp = await getPreviewFramesByApp(ordered.map((a) => a.id));
 
   return (
     <div className="w-full px-8 py-10 lg:px-12 2xl:px-16">
@@ -106,11 +138,13 @@ export default async function HomePage({
         )
       ) : (
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map((app) => (
+          {ordered.map((app) => (
             <AppCard
               key={app.id}
               app={app}
               unreadCount={unreadByApp.get(app.id) ?? 0}
+              previewImages={previewsFor(app, previewByApp)}
+              pinned={favorites.has(app.id)}
             />
           ))}
         </div>
@@ -133,7 +167,7 @@ function FilterBar({
       {FILTERS.map((f) => {
         const count = applyFilter(apps, f.key, myId).length;
         const isActive = f.key === active;
-        const href = f.key === 'all' ? '/' : `/?staff=${f.key}`;
+        const href = f.key === 'all' ? '/apps' : `/apps?staff=${f.key}`;
         return (
           <Link
             key={f.key}

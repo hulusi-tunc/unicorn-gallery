@@ -46,7 +46,7 @@ export function SignInClient({
         password,
       });
       if (err) throw err;
-      router.push(next ?? '/');
+      router.push(next ?? '/apps');
       router.refresh();
     } catch (err) {
       setError((err as Error).message);

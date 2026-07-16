@@ -79,6 +79,68 @@ export async function listArchivedApps(): Promise<AppRowWithStaff[]> {
   return (data ?? []) as unknown as AppRowWithStaff[];
 }
 
+/**
+ * App ids the current user has pinned ("favorited") to the top of their
+ * dashboard. Per-user; a Set for O(1) lookup when sorting + rendering cards.
+ */
+export async function getFavoriteAppIds(userId: string): Promise<Set<string>> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('app_favorites')
+    .select('app_id')
+    .eq('user_id', userId);
+  if (error || !data) return new Set();
+  return new Set((data as Array<{ app_id: string }>).map((r) => r.app_id));
+}
+
+/**
+ * A few representative screen thumbnails per app for the dashboard card's
+ * hover carousel: the FIRST frame of each distinct flow, in capture order,
+ * capped at `perApp`. Keyed by app id. Apps with no frames are absent — the
+ * card falls back to its single `preview_image_url`. One query for the whole
+ * grid (RLS scopes it to apps the user can see).
+ */
+export async function getPreviewFramesByApp(
+  appIds: string[],
+  perApp = 6,
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (appIds.length === 0) return out;
+  const supabase = await getSupabaseServerClient();
+  // Capture order mirrors the desktop view (see listFramesForApp): flow
+  // position first, then frame position. We take the first frame we see per
+  // (app, flow), so each preview is a distinct flow's opening screen.
+  const { data, error } = await supabase
+    .from('frames')
+    .select('app_id, flow_id, latest_image_url, flow_position, frame_position')
+    .in('app_id', appIds)
+    .not('latest_image_url', 'is', null)
+    .order('flow_position', { ascending: true, nullsFirst: false })
+    .order('flow_id', { ascending: true })
+    .order('frame_position', { ascending: true, nullsFirst: false });
+  if (error || !data) return out;
+  const flowsSeen = new Map<string, Set<string>>();
+  for (const r of data as Array<{
+    app_id: string;
+    flow_id: string;
+    latest_image_url: string | null;
+  }>) {
+    if (!r.latest_image_url) continue;
+    let seen = flowsSeen.get(r.app_id);
+    if (!seen) {
+      seen = new Set();
+      flowsSeen.set(r.app_id, seen);
+    }
+    if (seen.has(r.flow_id)) continue; // already took this flow's opening frame
+    const list = out.get(r.app_id) ?? [];
+    if (list.length >= perApp) continue;
+    seen.add(r.flow_id);
+    list.push(r.latest_image_url);
+    out.set(r.app_id, list);
+  }
+  return out;
+}
+
 export interface FrameUnresolvedSummary {
   count: number;
   /** Most recent unresolved comments, newest-first. Capped at 3 for hover. */
@@ -569,6 +631,35 @@ export async function listAppCustomers(appId: string): Promise<AppCustomerWithPr
     .order('added_at', { ascending: false });
   if (error) return [];
   return (data ?? []) as unknown as AppCustomerWithProfile[];
+}
+
+export interface ProjectMemberWithProfile {
+  user_id: string;
+  added_at: string;
+  assigned_by: string | null;
+  profile: ProfileLite & { role: 'agency' | 'customer' };
+}
+
+/**
+ * Studio members assigned to a project via project_members. These are the
+ * agency users who will see the project in the Capture desktop app and can
+ * push captures to it. The owner sees every project regardless and is not
+ * required to have a row here. The explicit FK hint disambiguates the two
+ * profile foreign keys (user_id, assigned_by).
+ */
+export async function listProjectMembers(
+  appId: string,
+): Promise<ProjectMemberWithProfile[]> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('project_members')
+    .select(
+      'user_id, added_at, assigned_by, profile:profiles!project_members_user_id_fkey(id, email, name, flavor, avatar_url, role)',
+    )
+    .eq('app_id', appId)
+    .order('added_at', { ascending: false });
+  if (error) return [];
+  return (data ?? []) as unknown as ProjectMemberWithProfile[];
 }
 
 export interface EligibleCustomer {

@@ -137,6 +137,23 @@ create table if not exists public.app_customers (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- project_members — agency members assigned to a project. Drives which projects
+-- each member sees inside the Capture desktop app. NOTE: the web gallery still
+-- shows ALL projects to agency users (apps_select is unchanged) — this scoping
+-- is enforced Capture-side only, via the /api/projects/mine endpoint. The studio
+-- owner (founder) bypasses assignment and sees every project.
+-- Many-to-many: a project can have several members; a member many projects.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.project_members (
+  app_id uuid not null references public.apps(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  assigned_by uuid references public.profiles(id) on delete set null,
+  added_at timestamptz not null default now(),
+  primary key (app_id, user_id)
+);
+create index if not exists project_members_user_idx on public.project_members(user_id);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- invites — pending customer invites by email
 -- ─────────────────────────────────────────────────────────────────────────────
 create table if not exists public.invites (
@@ -303,12 +320,28 @@ as $$
   );
 $$;
 
+-- True iff the current user is assigned to the given app via project_members.
+-- Mirrors is_app_customer; used by web admin reads and any future RLS scoping.
+create or replace function public.is_project_member(p_app_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists(
+    select 1 from public.project_members
+    where app_id = p_app_id and user_id = auth.uid()
+  );
+$$;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Row Level Security
 -- ─────────────────────────────────────────────────────────────────────────────
 alter table public.profiles enable row level security;
 alter table public.apps enable row level security;
 alter table public.app_customers enable row level security;
+alter table public.project_members enable row level security;
 alter table public.invites enable row level security;
 alter table public.builds enable row level security;
 alter table public.frames enable row level security;
@@ -340,6 +373,15 @@ create policy app_customers_select on public.app_customers for select
 
 drop policy if exists app_customers_agency_write on public.app_customers;
 create policy app_customers_agency_write on public.app_customers for all
+  using (public.is_agency()) with check (public.is_agency());
+
+-- project_members: agency manages; a member can see their own assignment rows
+drop policy if exists project_members_select on public.project_members;
+create policy project_members_select on public.project_members for select
+  using (public.is_agency() or user_id = auth.uid());
+
+drop policy if exists project_members_agency_write on public.project_members;
+create policy project_members_agency_write on public.project_members for all
   using (public.is_agency()) with check (public.is_agency());
 
 -- invites: agency manages; everyone else blocked
@@ -429,6 +471,26 @@ create index if not exists frame_reads_user_idx on public.frame_reads(user_id, l
 alter table public.frame_reads enable row level security;
 drop policy if exists frame_reads_self on public.frame_reads;
 create policy frame_reads_self on public.frame_reads for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- app_favorites — per-user "pin to top" for the apps dashboard. A pinned app
+-- floats above the rest of THAT user's grid (newest-pinned first); it has no
+-- effect on anyone else's order. No role distinction — you can only pin apps
+-- you can already see (the apps RLS scopes the read; this table is self-only).
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.app_favorites (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  app_id uuid not null references public.apps(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, app_id)
+);
+create index if not exists app_favorites_user_idx
+  on public.app_favorites(user_id, created_at desc);
+
+alter table public.app_favorites enable row level security;
+drop policy if exists app_favorites_self on public.app_favorites;
+create policy app_favorites_self on public.app_favorites for all
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- ─────────────────────────────────────────────────────────────────────────────

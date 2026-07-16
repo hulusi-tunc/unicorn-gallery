@@ -26,6 +26,8 @@ interface Props {
   iconUrl: string | null;
   accent: string;
   canEdit: boolean;
+  /** Rendered icon size in px (default 28). The hero uses a larger size. */
+  size?: number;
 }
 
 export function EditProjectButton({
@@ -34,6 +36,7 @@ export function EditProjectButton({
   iconUrl,
   accent,
   canEdit,
+  size = 28,
 }: Props): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
@@ -136,18 +139,19 @@ export function EditProjectButton({
     });
   };
 
+  const radius = size <= 32 ? 8 : Math.round(size * 0.25);
   const iconBox: CSSProperties = {
     position: 'relative',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: size,
+    height: size,
+    borderRadius: radius,
     background: accent,
     color: 'white',
     fontFamily: editorialFonts.display,
-    fontSize: 13,
+    fontSize: Math.round(size * 0.46),
     fontWeight: 600,
     flexShrink: 0,
     cursor: canEdit ? 'pointer' : 'default',

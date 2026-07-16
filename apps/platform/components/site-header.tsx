@@ -7,7 +7,7 @@ import { UnicornLogo } from '@/components/brand/unicorn-logo';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
 const NAV_LINKS = [
-  { href: '/', label: 'Apps' },
+  { href: '/apps', label: 'Apps' },
   { href: '/admin', label: 'Admin' },
 ] as const;
 

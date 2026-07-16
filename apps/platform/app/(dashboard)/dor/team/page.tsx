@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export default async function DorTeamPage(): Promise<ReactNode> {
   const profile = await getCurrentProfile();
   if (!profile) redirect('/sign-in');
-  if (profile.role !== 'agency') redirect('/');
+  if (profile.role !== 'agency') redirect('/apps');
 
   const [apps, history] = await Promise.all([
     listVisibleApps(),

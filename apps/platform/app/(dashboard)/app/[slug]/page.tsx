@@ -2,9 +2,11 @@ import { Camera } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { ManifestFlow } from '@unicorn-studio/gallery-capture';
+import type { DetailTab } from '@/components/header';
 import { EmptyState } from '@/components/empty-state';
 import { HashScroller } from '@/components/hash-scroller';
 import { JourneyStrip } from '@/components/journey-strip';
+import { ScreensGrid } from '@/components/screens-grid';
 import {
   type FrameUnresolvedSummary,
   getAppBySlug,
@@ -47,7 +49,7 @@ export default async function AppOverviewPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ v?: string }>;
+  searchParams: Promise<{ v?: string; tab?: string }>;
 }): Promise<ReactNode> {
   const [{ slug }, sp] = await Promise.all([params, searchParams]);
   const app = await getAppBySlug(decodeURIComponent(slug));
@@ -76,38 +78,39 @@ export default async function AppOverviewPage({
   }
 
   const tree = buildFlowTree(manifest.flows);
-  const totalFrames = manifest.flows.reduce((n, f) => n + f.frames.length, 0);
   const unresolvedByFrame = await getUnresolvedCommentsByFrame(app.id);
+
+  const activeTab: DetailTab = sp.tab === 'screens' ? 'screens' : 'flows';
+  const versionQuery =
+    selectedBuild?.version != null ? `?v=${selectedBuild.version}` : '';
 
   return (
     <main className="flex flex-1 flex-col overflow-y-auto bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
       <HashScroller />
-      <div className="border-b border-[oklch(0.9_0.007_260)] px-10 py-7 dark:border-[oklch(0.24_0.008_260)]">
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-          Overview
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]">
-          All flows
-        </h1>
-        <p className="mt-1 text-sm text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-          {tree.length} flow{tree.length === 1 ? '' : 's'} · {totalFrames} frame
-          {totalFrames === 1 ? '' : 's'}
-        </p>
-      </div>
 
-      <div className="flex flex-col gap-12 px-2 py-8">
-        {tree.map((node) => (
-          <FlowSection
-            key={node.flow.id}
-            node={node}
-            platform={manifest.platform}
-            appSlug={app.slug}
-            isSub={false}
-            unresolvedByFrame={unresolvedByFrame}
-            versionQuery={selectedBuild ? `?v=${selectedBuild.version ?? ''}` : ''}
-          />
-        ))}
-      </div>
+      {activeTab === 'screens' ? (
+        <ScreensGrid
+          flows={manifest.flows}
+          platform={manifest.platform}
+          appSlug={app.slug}
+          unresolvedByFrame={unresolvedByFrame}
+          versionQuery={versionQuery}
+        />
+      ) : (
+        <div className="flex flex-col gap-12 px-2 py-8">
+          {tree.map((node) => (
+            <FlowSection
+              key={node.flow.id}
+              node={node}
+              platform={manifest.platform}
+              appSlug={app.slug}
+              isSub={false}
+              unresolvedByFrame={unresolvedByFrame}
+              versionQuery={versionQuery}
+            />
+          ))}
+        </div>
+      )}
     </main>
   );
 }

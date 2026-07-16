@@ -79,7 +79,7 @@ export function SiteFooter(): ReactNode {
         <FooterColumn
           label="Product"
           links={[
-            { href: '/', label: 'Apps' },
+            { href: '/apps', label: 'Apps' },
             { href: '/admin', label: 'Admin' },
           ]}
           style={{ gridColumn: 'span 2' }}

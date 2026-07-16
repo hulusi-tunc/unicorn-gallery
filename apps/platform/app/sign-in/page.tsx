@@ -15,7 +15,7 @@ export default async function SignInPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect(next ?? '/');
+  if (user) redirect(next ?? '/apps');
 
   return <SignInClient next={next} initialError={error ?? null} />;
 }

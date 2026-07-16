@@ -80,7 +80,7 @@ export function DashboardTopNav({
     <nav style={navStyle}>
       <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
         <Link
-          href="/"
+          href="/apps"
           aria-label="Unicorn Studio home"
           onMouseEnter={() => setLogoHovered(true)}
           onMouseLeave={() => setLogoHovered(false)}

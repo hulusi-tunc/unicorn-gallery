@@ -47,7 +47,7 @@ export function ArchiveAppButton({
         setError(r.error ?? 'Archive failed.');
         return;
       }
-      router.push('/');
+      router.push('/apps');
     });
   };
 
