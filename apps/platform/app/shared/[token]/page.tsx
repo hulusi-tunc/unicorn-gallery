@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { ManifestFlow, ManifestFrame, Platform } from '@unicorn-studio/gallery-capture';
 import { DeviceBezel } from '@/components/device-bezel';
+import { FrameLightbox } from '@/components/frame-lightbox';
 import { WebCardThumb } from '@/components/web-card-thumb';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { imageHref } from '@/lib/image-href';
@@ -324,7 +325,9 @@ function ReadonlyCard({
           {String(step).padStart(2, '0')}
         </span>
         {src ? (
-          <DeviceBezel src={src} alt={frame.name} style={{ height }} />
+          <FrameLightbox src={src} name={frame.name} isMobile>
+            <DeviceBezel src={src} alt={frame.name} style={{ height }} />
+          </FrameLightbox>
         ) : (
           <div
             style={{ height, aspectRatio: '450 / 920' }}
@@ -341,7 +344,9 @@ function ReadonlyCard({
         {String(step).padStart(2, '0')}
       </span>
       {src ? (
-        <WebCardThumb src={src} alt={frame.name} width={WEB_CARD_WIDTH} height={WEB_CARD_HEIGHT} />
+        <FrameLightbox src={src} name={frame.name}>
+          <WebCardThumb src={src} alt={frame.name} width={WEB_CARD_WIDTH} height={WEB_CARD_HEIGHT} />
+        </FrameLightbox>
       ) : (
         <div
           className="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-[oklch(0.18_0.008_260)]"

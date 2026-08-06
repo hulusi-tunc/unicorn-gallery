@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, History } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { DeviceFrame } from '@/components/device-frame';
+import { FrameLightbox } from '@/components/frame-lightbox';
 import { imageHref } from '@/lib/image-href';
 
 interface CaptureEntry {
@@ -170,7 +171,9 @@ export function FrameVersionStage({
             <ChevronLeft size={18} />
           </Link>
         ) : null}
-        <DeviceFrame platform={platform} src={currentSrc} alt={frameName} />
+        <FrameLightbox src={currentSrc} name={frameName} isMobile={platform !== 'web'}>
+          <DeviceFrame platform={platform} src={currentSrc} alt={frameName} />
+        </FrameLightbox>
         {nextHref ? (
           <Link
             href={nextHref}

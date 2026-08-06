@@ -18,6 +18,7 @@ import {
   type PDFPage,
 } from 'pdf-lib';
 import type { Platform } from '@/lib/db';
+import { chooseBezel, type BezelSpec } from '@/lib/bezel-specs';
 import {
   getAppBySlug,
   getBuildByVersion,
@@ -38,8 +39,9 @@ export const runtime = 'nodejs';
  * pages themselves so "download what I'm looking at" works.
  *
  * Layout: each flow gets its own section starting on a fresh page; ios/
- * android screens render inside the same iPhone bezel the gallery uses
- * (public/iphone-17.png); web screens get a plain bordered card.
+ * android screens render inside the same aspect-matched device bezel the
+ * gallery uses (iPhone or iPad, chosen per screenshot from lib/bezel-specs);
+ * web screens get a plain bordered card.
  */
 export async function GET(
   request: NextRequest,
@@ -111,14 +113,13 @@ export async function GET(
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
 
   const platform = app.platform;
-  const bezel = platform === 'web' ? null : await loadBezelImage(pdf);
 
   const versionLabel = resolvedVersion != null ? `v${resolvedVersion}` : 'Latest';
 
   if (flowGroups.length === 0) {
     drawEmptyState(pdf, font, boldFont, app.name, versionLabel);
   } else {
-    await drawFlows(pdf, font, boldFont, app.name, versionLabel, platform, bezel, flowGroups, allImages);
+    await drawFlows(pdf, font, boldFont, app.name, versionLabel, platform, flowGroups, allImages);
   }
 
   const bytes = await pdf.save();
@@ -181,15 +182,24 @@ function detectImageFormat(b: Uint8Array): 'png' | 'jpg' | 'unknown' {
   return 'unknown';
 }
 
-async function loadBezelImage(pdf: PDFDocument): Promise<PDFImage | null> {
-  try {
-    const bytes = await readFile(path.join(process.cwd(), 'public', 'iphone-17.png'));
-    return await pdf.embedPng(bytes);
-  } catch {
-    // Bezel asset missing or unreadable — fall back to borderless rendering
-    // rather than failing the whole download.
-    return null;
-  }
+/**
+ * Lazily embed the frame PNG for a bezel spec, cached per asset so an
+ * all-iPhone project embeds one frame image, not one per screenshot.
+ * Returns null when the asset is missing or unreadable — the cell falls
+ * back to a borderless card rather than failing the whole download.
+ */
+function makeBezelLoader(pdf: PDFDocument): (spec: BezelSpec) => Promise<PDFImage | null> {
+  const cache = new Map<string, Promise<PDFImage | null>>();
+  return (spec) => {
+    let entry = cache.get(spec.light);
+    if (!entry) {
+      entry = readFile(path.join(process.cwd(), 'public', spec.light))
+        .then((bytes) => pdf.embedPng(bytes))
+        .catch(() => null);
+      cache.set(spec.light, entry);
+    }
+    return entry;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,15 +222,6 @@ const SURFACE = rgb(0.96, 0.96, 0.97);
 const BORDER = rgb(0.86, 0.86, 0.88);
 const SCREEN_BG = rgb(0, 0, 0);
 
-// iPhone bezel geometry, mirroring components/iphone-bezel.tsx so the PDF
-// matches the gallery's on-screen rendering pixel-for-pixel proportionally.
-const BEZEL_ASPECT = 450 / 920;
-const SCREEN_INSET_X_PCT = 0.0533;
-const SCREEN_INSET_Y_PCT = 0.025;
-const SCREEN_W_PCT = 0.8933;
-const SCREEN_H_PCT = 0.95;
-const SCREEN_RADIUS_PCT = 0.065; // = 13% / 2
-
 interface FrameEntry {
   name: string;
   imageUrl: string;
@@ -242,12 +243,14 @@ interface GridSpec {
   perPage: number;
 }
 
-function computeGrid(platform: Platform): GridSpec {
-  // Mobile bezels are very tall (aspect 0.49) — a 3x2 grid leaves room for
-  // each bezel to render at a usable size. Web screens are landscape-ish
-  // and look better in a wider 2x3 grid.
-  const cols = platform === 'web' ? 2 : 3;
-  const rows = platform === 'web' ? 3 : 2;
+function computeGrid(platform: Platform, landscapeMobile: boolean): GridSpec {
+  // Portrait mobile bezels are tall (aspect 0.49–0.77) — a 3x2 grid leaves
+  // room for each bezel to render at a usable size. Landscape captures
+  // (iPad in landscape) and web screens are wide and look better in a
+  // 2-column grid.
+  const wide = platform === 'web' || landscapeMobile;
+  const cols = wide ? 2 : 3;
+  const rows = wide ? 3 : 2;
   const cellW = (PAGE_W - MARGIN * 2 - CELL_GUTTER * (cols - 1)) / cols;
   const gridTop =
     PAGE_H - MARGIN - HEADER_H - HEADER_GAP - FLOW_BAND_H - FLOW_BAND_GAP;
@@ -273,33 +276,47 @@ async function drawFlows(
   projectName: string,
   versionLabel: string,
   platform: Platform,
-  bezel: PDFImage | null,
   flows: FlowGroup[],
   images: FetchedImage[],
 ): Promise<void> {
-  const grid = computeGrid(platform);
-
-  // Pre-embed every image and classify by aspect so we know how many PDF
-  // pages each flow will need before drawing the first one. This lets the
-  // running page counter ("X of Y") stay accurate even when some frames
-  // get their own multi-page render.
-  const planByFlow: Array<{ flow: FlowGroup; slots: Slot[]; totalPages: number }> = [];
-  let totalPages = 0;
+  // Pre-embed every image so we can (a) size the grid from the dominant
+  // orientation — landscape iPad captures need wider cells than portrait
+  // phones — and (b) know how many PDF pages each flow will need before
+  // drawing the first one, keeping the running "X of Y" counter accurate.
+  const flowItems: Array<{ flow: FlowGroup; items: SlotItem[] }> = [];
   let imageOffset = 0;
   for (const flow of flows) {
     const flowImages = images.slice(imageOffset, imageOffset + flow.frames.length);
     imageOffset += flow.frames.length;
+    const items: SlotItem[] = [];
+    for (let i = 0; i < flow.frames.length; i++) {
+      const embedded = await tryEmbed(pdf, flowImages[i]!);
+      items.push({ frame: flow.frames[i]!, image: flowImages[i]!, embedded });
+    }
+    flowItems.push({ flow, items });
+  }
+
+  const measured = flowItems
+    .flatMap((f) => f.items)
+    .filter((it): it is SlotItem & { embedded: PDFImage } => it.embedded != null);
+  const landscapeMobile =
+    platform !== 'web' &&
+    measured.length > 0 &&
+    measured.filter((it) => it.embedded.width > it.embedded.height).length * 2 > measured.length;
+  const grid = computeGrid(platform, landscapeMobile);
+  const bezelFor = makeBezelLoader(pdf);
+
+  const planByFlow: Array<{ flow: FlowGroup; slots: Slot[]; totalPages: number }> = [];
+  let totalPages = 0;
+  for (const { flow, items } of flowItems) {
     const slots: Slot[] = [];
     let currentGrid: SlotItem[] = [];
-    for (let i = 0; i < flow.frames.length; i++) {
-      const frame = flow.frames[i]!;
-      const image = flowImages[i]!;
-      const embedded = await tryEmbed(pdf, image);
+    for (const item of items) {
+      const { embedded } = item;
       const isFullPage =
         platform === 'web' &&
         embedded != null &&
         embedded.height / embedded.width >= FULL_PAGE_ASPECT;
-      const item: SlotItem = { frame, image, embedded };
       if (isFullPage) {
         if (currentGrid.length > 0) {
           slots.push({ kind: 'grid', items: currentGrid });
@@ -365,9 +382,8 @@ async function drawFlows(
           const x = MARGIN + col * (grid.cellW + CELL_GUTTER);
           const y = grid.gridTop - row * (grid.cellH + CELL_GUTTER) - grid.cellH;
           await drawCell(
-            pdf, page, font, boldFont, platform, bezel,
-            item.frame, item.image, x, y, grid.cellW, grid.cellH,
-            item.embedded,
+            pdf, page, font, boldFont, platform, bezelFor,
+            item, x, y, grid.cellW, grid.cellH,
           );
         }
       } else {
@@ -465,25 +481,31 @@ async function drawCell(
   font: PDFFont,
   boldFont: PDFFont,
   platform: Platform,
-  bezel: PDFImage | null,
-  frame: FrameEntry,
-  image: FetchedImage,
+  bezelFor: (spec: BezelSpec) => Promise<PDFImage | null>,
+  item: SlotItem,
   x: number,
   y: number,
   w: number,
   h: number,
-  preembedded?: PDFImage | null,
 ): Promise<void> {
   const imageH = h - CAPTION_H - CAPTION_GAP;
   const imageY = y + CAPTION_H + CAPTION_GAP;
 
+  // Pick the frame whose screen aspect best matches this screenshot — same
+  // selection the gallery's DeviceBezel makes on screen. Unmeasurable images
+  // fall back to the iPhone frame.
+  const spec = chooseBezel(
+    item.embedded ? item.embedded.width / item.embedded.height : null,
+  );
+  const bezel = platform === 'web' ? null : await bezelFor(spec);
+
   if (platform === 'web' || !bezel) {
-    await drawWebCard(pdf, page, font, image, x, imageY, w, imageH, preembedded);
+    await drawWebCard(pdf, page, font, item.image, x, imageY, w, imageH, item.embedded);
   } else {
-    await drawBezeledCell(pdf, page, font, bezel, image, x, imageY, w, imageH, preembedded);
+    drawBezeledCell(page, font, spec, bezel, item, x, imageY, w, imageH);
   }
 
-  drawCaption(page, font, boldFont, frame.name, x, y, w);
+  drawCaption(page, font, boldFont, item.frame.name, x, y, w);
 }
 
 /**
@@ -528,43 +550,45 @@ async function drawWebCard(
 }
 
 /**
- * Mobile platforms: render the screenshot inside the iPhone bezel PNG. The
- * bezel asset is opaque chrome around a transparent rounded screen cutout;
- * we draw the screen content first (clipped to the same rounded rect the
- * bezel exposes) then stamp the bezel on top.
+ * Mobile platforms: render the screenshot inside the aspect-matched device
+ * frame PNG (iPhone or iPad). The bezel asset is opaque chrome around a
+ * transparent rounded screen cutout; we draw the screen content first
+ * (clipped to the same rounded rect the bezel exposes) then stamp the bezel
+ * on top.
  */
-async function drawBezeledCell(
-  pdf: PDFDocument,
+function drawBezeledCell(
   page: PDFPage,
   font: PDFFont,
+  spec: BezelSpec,
   bezel: PDFImage,
-  image: FetchedImage,
+  item: SlotItem,
   x: number,
   y: number,
   w: number,
   h: number,
-  preembedded?: PDFImage | null,
-): Promise<void> {
+): void {
   // Fit a bezel-aspect box inside the cell.
   const cellRatio = w / h;
   let bezelW: number;
   let bezelH: number;
-  if (cellRatio > BEZEL_ASPECT) {
+  if (cellRatio > spec.frameAspect) {
     bezelH = h;
-    bezelW = h * BEZEL_ASPECT;
+    bezelW = h * spec.frameAspect;
   } else {
     bezelW = w;
-    bezelH = w / BEZEL_ASPECT;
+    bezelH = w / spec.frameAspect;
   }
   const bezelX = x + (w - bezelW) / 2;
   const bezelY = y + (h - bezelH) / 2;
 
   // Screen viewport — the area inside the bezel where pixels show through.
-  const screenW = bezelW * SCREEN_W_PCT;
-  const screenH = bezelH * SCREEN_H_PCT;
-  const screenX = bezelX + bezelW * SCREEN_INSET_X_PCT;
-  const screenY = bezelY + bezelH * SCREEN_INSET_Y_PCT;
-  const radius = Math.min(screenW * SCREEN_RADIUS_PCT, 60);
+  // Spec insets are % from the frame's top-left; PDF y runs bottom-up, so
+  // the screen's bottom edge sits at (100 - top - height)% of the frame.
+  const screenW = bezelW * (spec.width / 100);
+  const screenH = bezelH * (spec.height / 100);
+  const screenX = bezelX + bezelW * (spec.left / 100);
+  const screenY = bezelY + bezelH * ((100 - spec.top - spec.height) / 100);
+  const radius = Math.min(screenW * spec.radiusFrac, spec.radiusCapPx ?? Infinity);
 
   // Clip to the rounded screen rect so the screenshot's square corners
   // don't poke into the bezel's rounded cutout.
@@ -573,7 +597,7 @@ async function drawBezeledCell(
   page.pushOperators(clip(), endPath());
 
   // Black background fills any letterbox bars if the screenshot's aspect
-  // doesn't match the iPhone screen exactly.
+  // doesn't match the chosen screen exactly.
   page.drawRectangle({
     x: screenX,
     y: screenY,
@@ -582,7 +606,7 @@ async function drawBezeledCell(
     color: SCREEN_BG,
   });
 
-  const embedded = preembedded ?? (await tryEmbed(pdf, image));
+  const embedded = item.embedded;
   if (embedded) {
     const fit = fitContain(embedded.width, embedded.height, screenW, screenH);
     page.drawImage(embedded, {
@@ -608,7 +632,7 @@ async function drawBezeledCell(
     drawPlaceholderLabel(
       page,
       font,
-      placeholderText(image),
+      placeholderText(item.image),
       screenX,
       screenY,
       screenW,
