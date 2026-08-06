@@ -19,9 +19,18 @@ export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({
   children,
+  modal,
   params,
 }: {
   children: ReactNode;
+  /**
+   * Parallel `@modal` slot. An intercepting route (`@modal/(.)[flowId]/[frameId]`)
+   * captures frame-card clicks from anywhere under this app — the landing page,
+   * the Screens grid, or a flow grid — and renders the frame as an overlay modal
+   * on top of the current view. Hard refresh / deep link has no intercept, so the
+   * slot falls back to `default.tsx` (null) and the full `[frameId]` page renders.
+   */
+  modal: ReactNode;
   params: Promise<{ slug: string }>;
 }): Promise<ReactNode> {
   const { slug } = await params;
@@ -111,6 +120,7 @@ export default async function AppLayout({
         ) : null}
         <div className="flex flex-1 overflow-hidden">{children}</div>
       </div>
+      {modal}
     </div>
   );
 }

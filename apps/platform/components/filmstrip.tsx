@@ -23,6 +23,7 @@ export function Filmstrip({
   appSlug,
   activeFrameId,
   versionQuery = '',
+  replace = false,
 }: {
   flow: ManifestFlow;
   platform: Platform;
@@ -30,6 +31,12 @@ export function Filmstrip({
   activeFrameId: string;
   /** Pre-formatted `?v=N` query string for past-version browsing. Empty when latest. */
   versionQuery?: string;
+  /**
+   * Use history `replace` instead of `push` when jumping between frames. Set by
+   * the frame modal so stepping through screens doesn't pile up history entries
+   * (otherwise the close button would need one click per screen visited).
+   */
+  replace?: boolean;
 }): ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = platform !== 'web';
@@ -54,6 +61,7 @@ export function Filmstrip({
           isMobile={isMobile}
           active={frame.id === activeFrameId}
           versionQuery={versionQuery}
+          replace={replace}
         />
       ))}
     </div>
@@ -68,6 +76,7 @@ function FilmstripCell({
   isMobile,
   active,
   versionQuery,
+  replace,
 }: {
   frame: ManifestFrame;
   step: number;
@@ -76,10 +85,12 @@ function FilmstripCell({
   isMobile: boolean;
   active: boolean;
   versionQuery: string;
+  replace?: boolean;
 }): ReactNode {
   return (
     <Link
       data-active={active}
+      replace={replace}
       href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flowId)}/${encodeURIComponent(frame.id)}${versionQuery}`}
       className={cn(
         'group flex shrink-0 flex-col items-center gap-1.5 rounded-md p-1.5 transition-colors',
