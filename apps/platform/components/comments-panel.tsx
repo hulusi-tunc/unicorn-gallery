@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   CornerDownRight,
+  Languages,
   Loader2,
   MessageCircle,
   Pencil,
@@ -457,6 +458,41 @@ function CommentItem({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const [editError, setEditError] = useState<string | null>(null);
+  // On-demand translation: fetched once, then toggled between original and
+  // translated text. Clients write French, the studio reads English (and
+  // vice versa) — target follows the viewer's browser language.
+  const [translated, setTranslated] = useState<string | null>(null);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [translating, setTranslating] = useState(false);
+
+  const onToggleTranslate = async (): Promise<void> => {
+    if (showTranslation) {
+      setShowTranslation(false);
+      return;
+    }
+    if (translated) {
+      setShowTranslation(true);
+      return;
+    }
+    setTranslating(true);
+    try {
+      const target = (navigator.language || 'en').slice(0, 2);
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: comment.body, target }),
+      });
+      const data = (await res.json()) as { ok?: boolean; translated?: string };
+      if (data.ok && data.translated) {
+        setTranslated(data.translated);
+        setShowTranslation(true);
+      }
+    } catch {
+      // Non-fatal — the original text stays visible.
+    } finally {
+      setTranslating(false);
+    }
+  };
   const date = new Date(comment.created_at);
   const dateLabel = isNaN(date.getTime())
     ? ''
@@ -659,7 +695,10 @@ function CommentItem({
               textDecorationColor: t.textDisabled,
             }}
           >
-            {renderCommentBody(comment.body, t.accent)}
+            {renderCommentBody(
+              showTranslation && translated ? translated : comment.body,
+              t.accent,
+            )}
           </p>
         )}
         {!editing ? (
@@ -674,6 +713,23 @@ function CommentItem({
           >
             <p style={{ margin: 0, fontSize: 10, color: t.textDisabled }}>{dateLabel}</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                type="button"
+                onClick={() => void onToggleTranslate()}
+                title={showTranslation ? 'Show original text' : 'Translate this comment'}
+                style={{
+                  ...chipBtnStyle(t),
+                  ...(showTranslation ? { color: t.accent } : {}),
+                }}
+                disabled={translating}
+              >
+                {translating ? (
+                  <Loader2 size={10} className="animate-spin" />
+                ) : (
+                  <Languages size={10} />
+                )}
+                {showTranslation ? 'Original' : 'Translate'}
+              </button>
               {onReplyClick ? (
                 <button
                   type="button"
