@@ -216,6 +216,10 @@ create table if not exists public.frame_versions (
 create index if not exists frame_versions_build_idx on public.frame_versions(build_id);
 create index if not exists frame_versions_app_idx on public.frame_versions(app_id, created_at desc);
 
+-- Motion proof — optional short clip (mp4/webm) recorded alongside the
+-- screenshot, e.g. hover/scroll animations. Public storage URL.
+alter table public.frame_versions add column if not exists video_url text;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- frames — derived from manifest, stable across builds.
 -- Comments live on frame.id, so they survive screenshot updates.
@@ -247,6 +251,9 @@ create index if not exists frames_app_parent_flow_idx
 -- desktop view exactly.
 alter table public.frames add column if not exists flow_position int;
 alter table public.frames add column if not exists frame_position int;
+
+-- Motion proof — latest short clip (mp4/webm) for this frame, when pushed.
+alter table public.frames add column if not exists latest_video_url text;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- frame_captures — per-frame intra-build version history.
@@ -320,6 +327,25 @@ as $$
   );
 $$;
 
+-- True iff the current user and the target user are customers of at least one
+-- common app. Lets a signed-in customer read the profiles of fellow customers
+-- on their own apps (for @-mentions and comment author display) without
+-- exposing the whole profiles table.
+create or replace function public.shares_app_with(target uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists(
+    select 1
+    from public.app_customers mine
+    join public.app_customers theirs on theirs.app_id = mine.app_id
+    where mine.user_id = auth.uid() and theirs.user_id = target
+  );
+$$;
+
 -- True iff the current user is assigned to the given app via project_members.
 -- Mirrors is_app_customer; used by web admin reads and any future RLS scoping.
 create or replace function public.is_project_member(p_app_id uuid)
@@ -348,10 +374,17 @@ alter table public.frames enable row level security;
 alter table public.frame_versions enable row level security;
 alter table public.comments enable row level security;
 
--- profiles: read self or all-if-agency; update self only
+-- profiles: read self; agency reads all; customers read agency staff (so the
+-- @-mention list and comment authors show the PM/designer/team) and fellow
+-- customers of apps they belong to. Update self only.
 drop policy if exists profiles_read on public.profiles;
 create policy profiles_read on public.profiles for select
-  using (auth.uid() = id or public.is_agency());
+  using (
+    auth.uid() = id
+    or public.is_agency()
+    or role = 'agency'
+    or public.shares_app_with(id)
+  );
 
 drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self on public.profiles for update
@@ -366,10 +399,11 @@ drop policy if exists apps_agency_write on public.apps;
 create policy apps_agency_write on public.apps for all
   using (public.is_agency()) with check (public.is_agency());
 
--- app_customers: agency manages; customer can see own row
+-- app_customers: agency manages; a customer sees every membership row of the
+-- apps they belong to (needed to build the @-mention list), not just their own.
 drop policy if exists app_customers_select on public.app_customers;
 create policy app_customers_select on public.app_customers for select
-  using (public.is_agency() or user_id = auth.uid());
+  using (public.is_agency() or user_id = auth.uid() or public.is_app_customer(app_id));
 
 drop policy if exists app_customers_agency_write on public.app_customers;
 create policy app_customers_agency_write on public.app_customers for all

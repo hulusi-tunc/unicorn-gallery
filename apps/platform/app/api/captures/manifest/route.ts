@@ -60,7 +60,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   // latest build's `frame_versions` as the source of truth for "current".
   const { data: latestBuild } = await admin
     .from('builds')
-    .select('id')
+    .select('id, flow_tree')
     .eq('app_id', app.id)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -141,9 +141,62 @@ export async function GET(request: NextRequest): Promise<Response> {
     });
   }
 
+  // Inject frameless container flows (e.g. "Site public" holding only
+  // sub-flows) from the latest build's flow_tree. The frames-derived map
+  // can't represent them, and without the parent rows Capture renders
+  // every sub-flow flat at the top level.
+  const treeMeta = ((latestBuild as { flow_tree?: unknown } | null)?.flow_tree ?? []) as Array<{
+    id: string;
+    name: string;
+    parentFlowId: string | null;
+    position: number | null;
+  }>;
+  if (treeMeta.length > 0) {
+    const metaById = new Map(treeMeta.map((m) => [m.id, m]));
+    for (const f of Array.from(flowMap.values())) {
+      let pid = f.parentFlowId;
+      while (pid && !flowMap.has(pid)) {
+        const m = metaById.get(pid);
+        if (!m) break;
+        flowMap.set(pid, {
+          id: m.id,
+          name: m.name,
+          parentFlowId: m.parentFlowId ?? undefined,
+          position: m.position ?? undefined,
+        });
+        pid = m.parentFlowId ?? undefined;
+      }
+    }
+  }
+
+  // Order flows the way the desktop should display them: by position, with
+  // frameless containers inheriting the smallest position among their
+  // descendants (old builds stored null positions for containers). Capture
+  // preserves import order in its local flow list, and push re-derives
+  // positions from that order — so a sensible order here round-trips.
+  const flowsOut = Array.from(flowMap.values());
+  const childrenOf = new Map<string, ExportedFlow[]>();
+  for (const f of flowsOut) {
+    if (!f.parentFlowId) continue;
+    const list = childrenOf.get(f.parentFlowId) ?? [];
+    list.push(f);
+    childrenOf.set(f.parentFlowId, list);
+  }
+  const effMemo = new Map<string, number>();
+  const eff = (f: ExportedFlow): number => {
+    const hit = effMemo.get(f.id);
+    if (hit !== undefined) return hit;
+    effMemo.set(f.id, Number.POSITIVE_INFINITY);
+    let p = f.position ?? Number.POSITIVE_INFINITY;
+    for (const c of childrenOf.get(f.id) ?? []) p = Math.min(p, eff(c));
+    effMemo.set(f.id, p);
+    return p;
+  };
+  flowsOut.sort((a, b) => eff(a) - eff(b));
+
   const manifest: ExportedManifest = {
     app: { id: app.id, slug: app.slug, platform: app.platform },
-    flows: Array.from(flowMap.values()),
+    flows: flowsOut,
     frames,
   };
   return NextResponse.json(manifest);

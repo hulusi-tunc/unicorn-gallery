@@ -127,6 +127,8 @@ export interface Frame {
   /** Capture-assigned index of the frame within its flow. */
   frame_position: number | null;
   latest_image_url: string | null;
+  /** Public URL of the latest motion clip (mp4/webm), when one was pushed. */
+  latest_video_url: string | null;
   latest_build_id: string | null;
   created_at: string;
 }
@@ -222,6 +224,12 @@ export interface ManifestFrameSnapshot {
   /** Index within the flow (smaller = earlier). */
   position?: number;
   image: string;
+  /**
+   * Optional short motion clip (mp4/webm) proving the screen's animations
+   * and interactions. Push-side this is a multipart part name; after intake
+   * it's rewritten to the public storage URL, same as `image`.
+   */
+  video?: string;
   /**
    * Past captures of this same frame slot, captured before the latest
    * one (newest first). Mirrors Capture's snap.versions[] array.

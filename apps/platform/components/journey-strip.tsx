@@ -5,7 +5,7 @@ import type {
   Platform,
 } from '@unicorn-studio/gallery-capture';
 import type { ReactNode } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Play } from 'lucide-react';
 import { DeviceBezel } from '@/components/device-bezel';
 import { UnresolvedBadge } from '@/components/unresolved-badge';
 import { WebCardThumb } from '@/components/web-card-thumb';
@@ -109,6 +109,14 @@ function JourneyCard({
             preview={unresolved.preview}
             offsetForUpdated={isFresh}
           />
+        ) : null}
+        {frame.video ? (
+          <span
+            className="absolute bottom-2 right-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur"
+            title="Has a motion clip"
+          >
+            <Play className="h-3 w-3" fill="currentColor" />
+          </span>
         ) : null}
 
         {isMobile ? (

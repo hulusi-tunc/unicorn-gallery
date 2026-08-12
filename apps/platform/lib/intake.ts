@@ -99,9 +99,21 @@ export async function ingestCapture({
     mime === 'image/webp' ? 'webp' : mime === 'image/jpeg' ? 'jpg' : 'png';
 
   const frameUrls: Array<{ frameId: string; url: string }> = [];
+  // A frame whose `image` is already one of OUR public storage URLs is a
+  // re-registration of a gallery-synced frame (Capture pulled it via Sync
+  // and is pushing it back as part of the full manifest). No bytes ride
+  // along — reuse the URL as-is so the frame stays part of the new build.
+  const storagePrefix = `${process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? ''}/storage/v1/object/public/`;
+  const isStorageRef = (image: string): boolean =>
+    storagePrefix.length > 40 && image.startsWith(storagePrefix);
   for (const flow of manifest.flows) {
     const newFrames: typeof flow.frames = [];
     for (const frame of flow.frames) {
+      if (isStorageRef(frame.image)) {
+        frameUrls.push({ frameId: frame.id, url: frame.image });
+        newFrames.push({ ...frame, versions: undefined });
+        continue;
+      }
       const screenshot = screenshots.get(frame.image);
       if (!screenshot) {
         return {
@@ -120,6 +132,35 @@ export async function ingestCapture({
       if (upErr) return { status: 500, message: `Storage upload failed: ${upErr.message}` };
       const { data: pub } = admin.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(storagePath);
       frameUrls.push({ frameId: frame.id, url: pub.publicUrl });
+
+      // Optional motion clip riding alongside the screenshot. A missing
+      // multipart part is skipped silently (the static frame still lands);
+      // an upload error likewise degrades to screenshot-only.
+      let videoUrl: string | undefined;
+      if (frame.video && isStorageRef(frame.video)) {
+        // Clip already uploaded direct-to-storage by Capture — the manifest
+        // carries its public URL instead of bytes. Reuse as-is.
+        videoUrl = frame.video;
+      } else if (frame.video) {
+        const clip = screenshots.get(frame.video);
+        if (clip) {
+          const vExt = clip.mimeType === 'video/webm' ? 'webm' : 'mp4';
+          const vPath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}-motion.${vExt}`;
+          const { error: vidErr } = await admin.storage
+            .from(SCREENSHOTS_BUCKET)
+            .upload(vPath, clip.bytes, {
+              contentType: clip.mimeType || 'video/mp4',
+              upsert: true,
+            });
+          if (!vidErr) {
+            const { data: vidPub } = admin.storage
+              .from(SCREENSHOTS_BUCKET)
+              .getPublicUrl(vPath);
+            videoUrl = vidPub.publicUrl;
+            uploaded++;
+          }
+        }
+      }
       // Upload past versions (newest-first in the array; idx=1+ since
       // idx=0 is the latest above). Missing PNGs in the multipart body
       // are skipped silently — better to lose history than reject the
@@ -150,6 +191,7 @@ export async function ingestCapture({
       newFrames.push({
         ...frame,
         image: pub.publicUrl,
+        video: videoUrl,
         versions: newVersions.length > 0 ? newVersions : undefined,
       });
       uploaded++;
@@ -215,11 +257,15 @@ export async function ingestCapture({
   // its children would flatten to the top level. Accumulate across chunked
   // batches of the same build (each batch carries its frames' ancestors).
   {
-    const incoming = rewritten.flows.map((f) => ({
+    // Fall back to the manifest array index when the client sends no explicit
+    // positions — same rule the frames writer uses (`flow.position ?? fi`) so
+    // frameless containers sort alongside their siblings instead of dropping
+    // to the bottom with a null position.
+    const incoming = rewritten.flows.map((f, fi) => ({
       id: f.id,
       name: f.name,
       parentFlowId: f.parentFlowId ?? null,
-      position: f.position ?? null,
+      position: f.position ?? fi,
     }));
     const { data: curRow } = await admin
       .from('builds')
@@ -247,16 +293,20 @@ export async function ingestCapture({
     .limit(1)
     .maybeSingle();
 
-  const prevMap = new Map<string, { image_url: string; frame_name: string }>();
+  const prevMap = new Map<
+    string,
+    { image_url: string; frame_name: string; video_url: string | null }
+  >();
   if (prevBuild) {
     const { data: prevRows } = await admin
       .from('frame_versions')
-      .select('flow_id, frame_id, image_url, frame_name')
+      .select('flow_id, frame_id, image_url, frame_name, video_url')
       .eq('build_id', prevBuild.id);
     for (const r of prevRows ?? []) {
       prevMap.set(`${r.flow_id}::${r.frame_id}`, {
         image_url: r.image_url,
         frame_name: r.frame_name,
+        video_url: r.video_url ?? null,
       });
     }
   }
@@ -267,6 +317,7 @@ export async function ingestCapture({
       let change_kind: 'added' | 'updated' | 'renamed' | 'unchanged';
       if (!prev) change_kind = 'added';
       else if (prev.image_url !== frame.image) change_kind = 'updated';
+      else if ((prev.video_url ?? null) !== (frame.video ?? null)) change_kind = 'updated';
       else if (prev.frame_name !== frame.name) change_kind = 'renamed';
       else change_kind = 'unchanged';
 
@@ -279,6 +330,7 @@ export async function ingestCapture({
           flow_name: flow.name,
           frame_name: frame.name,
           image_url: frame.image,
+          video_url: frame.video ?? null,
           change_kind,
         },
         { onConflict: 'build_id,flow_id,frame_id' },
@@ -370,6 +422,10 @@ export async function ingestCapture({
             flow_position: flowPos,
             frame_position: framePos,
             latest_image_url: frame.image,
+            // Only touch the clip column when this push carries one — a
+            // storage-URL re-ref (synced frame) has no video field and must
+            // not wipe a clip that already lives on the row.
+            ...(frame.video !== undefined ? { latest_video_url: frame.video } : {}),
             latest_build_id: buildId,
           },
           { onConflict: 'app_id,flow_id,frame_id' },

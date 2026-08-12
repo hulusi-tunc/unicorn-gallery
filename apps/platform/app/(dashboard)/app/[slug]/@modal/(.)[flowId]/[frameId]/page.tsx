@@ -82,6 +82,7 @@ export default async function FrameModalPage({
       flow={flow}
       activeFrameId={frame.id}
       src={imageHref(frame.image)}
+      videoSrc={frame.video}
       frameName={frame.name}
       frameRowId={frameRow.id}
       comments={comments}

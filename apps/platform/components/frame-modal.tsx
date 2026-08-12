@@ -30,6 +30,7 @@ export function FrameModal({
   flow,
   activeFrameId,
   src,
+  videoSrc,
   frameName,
   frameRowId,
   comments,
@@ -48,6 +49,8 @@ export function FrameModal({
   flow: ManifestFlow;
   activeFrameId: string;
   src: string;
+  /** Motion clip URL (mp4/webm). When set, plays in place of the still. */
+  videoSrc?: string;
   frameName: string;
   frameRowId: string;
   comments: CommentWithAuthor[];
@@ -173,7 +176,30 @@ export function FrameModal({
               </Link>
             ) : null}
 
-            {isMobile ? (
+            {videoSrc ? (
+              // Motion proof: loop the recorded clip in place of the still.
+              // Muted + autoplay so it starts without a click; controls stay
+              // available for scrubbing. The screenshot doubles as poster.
+              <video
+                src={videoSrc}
+                poster={src}
+                autoPlay
+                muted
+                loop
+                playsInline
+                controls
+                className={
+                  isMobile
+                    ? 'h-auto self-center rounded-[1.4rem] bg-black shadow-lg'
+                    : 'h-auto self-start rounded-lg bg-black shadow-lg'
+                }
+                style={
+                  isMobile
+                    ? { maxHeight: 'min(82vh, calc(100vh - 240px))', maxWidth: '100%' }
+                    : { width: 'min(1040px, 100%)', maxWidth: '100%' }
+                }
+              />
+            ) : isMobile ? (
               // Mobile: show the screen inside a phone bezel (matching the flow
               // cards), sized to fit the viewport height. The bezel screen
               // scrolls for taller-than-device full-page captures.

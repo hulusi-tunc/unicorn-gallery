@@ -812,6 +812,7 @@ export const getManifestForApp = cache(async (
       id: string;
       name: string;
       parentFlowId: string | null;
+      position: number | null;
       frames: Frame[];
     }
   >();
@@ -822,12 +823,14 @@ export const getManifestForApp = cache(async (
         id: f.flow_id,
         name: f.flow_name,
         parentFlowId: f.parent_flow_id,
+        position: f.flow_position ?? null,
         frames: [],
       };
       byFlow.set(f.flow_id, g);
     } else if (g.parentFlowId == null && f.parent_flow_id) {
       g.parentFlowId = f.parent_flow_id;
     }
+    if (g.position == null && f.flow_position != null) g.position = f.flow_position;
     g.frames.push(f);
   }
 
@@ -840,6 +843,7 @@ export const getManifestForApp = cache(async (
     id: string;
     name: string;
     parentFlowId: string | null;
+    position?: number | null;
   }>;
   if (treeMeta.length > 0) {
     const metaById = new Map(treeMeta.map((m) => [m.id, m]));
@@ -848,7 +852,13 @@ export const getManifestForApp = cache(async (
       while (pid && !byFlow.has(pid)) {
         const m = metaById.get(pid);
         if (!m) break;
-        byFlow.set(pid, { id: m.id, name: m.name, parentFlowId: m.parentFlowId, frames: [] });
+        byFlow.set(pid, {
+          id: m.id,
+          name: m.name,
+          parentFlowId: m.parentFlowId,
+          position: m.position ?? null,
+          frames: [],
+        });
         pid = m.parentFlowId;
       }
     }
@@ -859,7 +869,7 @@ export const getManifestForApp = cache(async (
     buildSha: latestBuild?.sha ?? '',
     capturedAt: latestBuild?.captured_at ?? new Date().toISOString(),
     platform: latestBuild?.platform ?? 'ios',
-    flows: Array.from(byFlow.values()).map((g) => ({
+    flows: sortFlowsByEffectivePosition(Array.from(byFlow.values())).map((g) => ({
       id: g.id,
       name: g.name,
       parentFlowId: g.parentFlowId ?? undefined,
@@ -867,10 +877,41 @@ export const getManifestForApp = cache(async (
         id: f.frame_id,
         name: f.frame_name,
         image: f.latest_image_url ?? '',
+        video: f.latest_video_url ?? undefined,
       })),
     })),
   };
 });
+
+/**
+ * Order flows for display by their capture-assigned position. Grouping flows
+ * without one (older builds stored `position: null` for every entry in
+ * `flow_tree`) inherit the smallest position found among their descendants, so
+ * a frameless container like "Site public" sorts where its sub-flows live
+ * instead of sinking below every positioned flow.
+ */
+function sortFlowsByEffectivePosition<
+  T extends { id: string; parentFlowId: string | null; position: number | null },
+>(flows: T[]): T[] {
+  const childrenOf = new Map<string, T[]>();
+  for (const f of flows) {
+    if (!f.parentFlowId) continue;
+    const list = childrenOf.get(f.parentFlowId) ?? [];
+    list.push(f);
+    childrenOf.set(f.parentFlowId, list);
+  }
+  const memo = new Map<string, number>();
+  const effective = (f: T): number => {
+    const hit = memo.get(f.id);
+    if (hit !== undefined) return hit;
+    memo.set(f.id, Number.POSITIVE_INFINITY); // cycle guard
+    let p = f.position ?? Number.POSITIVE_INFINITY;
+    for (const c of childrenOf.get(f.id) ?? []) p = Math.min(p, effective(c));
+    memo.set(f.id, p);
+    return p;
+  };
+  return [...flows].sort((a, b) => effective(a) - effective(b));
+}
 
 /**
  * Returns the set of `${flow_id}::${frame_id}` keys that belong to a given
@@ -905,7 +946,7 @@ async function getManifestForBuild(
   const [versionsResult, build] = await Promise.all([
     supabase
       .from('frame_versions')
-      .select('flow_id, frame_id, flow_name, frame_name, image_url')
+      .select('flow_id, frame_id, flow_name, frame_name, image_url, video_url')
       .eq('build_id', buildId)
       .eq('app_id', appId),
     (async () => {
@@ -929,6 +970,7 @@ async function getManifestForBuild(
     flow_name: string;
     frame_name: string;
     image_url: string;
+    video_url: string | null;
   }>;
   if (versions.length === 0) return null;
 
@@ -971,6 +1013,7 @@ async function getManifestForBuild(
         id: string;
         name: string;
         image: string;
+        video?: string;
         position: number | null;
       }>;
     }
@@ -993,6 +1036,7 @@ async function getManifestForBuild(
       id: v.frame_id,
       name: v.frame_name,
       image: v.image_url,
+      video: v.video_url ?? undefined,
       position: s?.frame_position ?? frameOrderCounter++,
     });
   }
@@ -1024,15 +1068,14 @@ async function getManifestForBuild(
     }
   }
 
-  const flows = Array.from(byFlow.values())
-    .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity))
+  const flows = sortFlowsByEffectivePosition(Array.from(byFlow.values()))
     .map((g) => ({
       id: g.id,
       name: g.name,
       parentFlowId: g.parentFlowId ?? undefined,
       frames: g.frames
         .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity))
-        .map((f) => ({ id: f.id, name: f.name, image: f.image })),
+        .map((f) => ({ id: f.id, name: f.name, image: f.image, video: f.video })),
     }));
 
   return {

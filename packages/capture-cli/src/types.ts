@@ -53,4 +53,6 @@ export interface ManifestFrame {
   id: string;
   name: string;
   image: string;
+  /** Optional short motion clip (mp4/webm) proving animations/interactions. */
+  video?: string;
 }
