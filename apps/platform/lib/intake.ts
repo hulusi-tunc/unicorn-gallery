@@ -1,8 +1,7 @@
 import 'server-only';
 import { getSupabaseAdminClient } from './supabase/server';
+import { R2_PUBLIC_PREFIX, r2PublicUrl, r2Put } from './r2';
 import type { ManifestSnapshot } from './db';
-
-const SCREENSHOTS_BUCKET = 'screenshots';
 
 export interface IntakeResult {
   appId: string;
@@ -103,9 +102,12 @@ export async function ingestCapture({
   // re-registration of a gallery-synced frame (Capture pulled it via Sync
   // and is pushing it back as part of the full manifest). No bytes ride
   // along — reuse the URL as-is so the frame stays part of the new build.
-  const storagePrefix = `${process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? ''}/storage/v1/object/public/`;
+  // Recognise both new R2 URLs and legacy Supabase URLs so re-synced
+  // manifests from Capture (which cache remoteImageUrl) skip re-upload.
+  const supabasePrefix = `${process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? ''}/storage/v1/object/public/`;
   const isStorageRef = (image: string): boolean =>
-    storagePrefix.length > 40 && image.startsWith(storagePrefix);
+    image.startsWith(R2_PUBLIC_PREFIX + '/') ||
+    (supabasePrefix.length > 40 && image.startsWith(supabasePrefix));
   for (const flow of manifest.flows) {
     const newFrames: typeof flow.frames = [];
     for (const frame of flow.frames) {
@@ -123,15 +125,13 @@ export async function ingestCapture({
       }
       const ext = extForMime(screenshot.mimeType);
       const storagePath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}.${ext}`;
-      const { error: upErr } = await admin.storage
-        .from(SCREENSHOTS_BUCKET)
-        .upload(storagePath, screenshot.bytes, {
-          contentType: screenshot.mimeType,
-          upsert: true,
-        });
-      if (upErr) return { status: 500, message: `Storage upload failed: ${upErr.message}` };
-      const { data: pub } = admin.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(storagePath);
-      frameUrls.push({ frameId: frame.id, url: pub.publicUrl });
+      try {
+        await r2Put(storagePath, screenshot.bytes, screenshot.mimeType);
+      } catch (e) {
+        return { status: 500, message: `Storage upload failed: ${(e as Error).message}` };
+      }
+      const pub = r2PublicUrl(storagePath);
+      frameUrls.push({ frameId: frame.id, url: pub });
 
       // Optional motion clip riding alongside the screenshot. A missing
       // multipart part is skipped silently (the static frame still lands);
@@ -146,18 +146,12 @@ export async function ingestCapture({
         if (clip) {
           const vExt = clip.mimeType === 'video/webm' ? 'webm' : 'mp4';
           const vPath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}-motion.${vExt}`;
-          const { error: vidErr } = await admin.storage
-            .from(SCREENSHOTS_BUCKET)
-            .upload(vPath, clip.bytes, {
-              contentType: clip.mimeType || 'video/mp4',
-              upsert: true,
-            });
-          if (!vidErr) {
-            const { data: vidPub } = admin.storage
-              .from(SCREENSHOTS_BUCKET)
-              .getPublicUrl(vPath);
-            videoUrl = vidPub.publicUrl;
+          try {
+            await r2Put(vPath, clip.bytes, clip.mimeType || 'video/mp4');
+            videoUrl = r2PublicUrl(vPath);
             uploaded++;
+          } catch {
+            // Degrade to screenshot-only — same as before.
           }
         }
       }
@@ -173,24 +167,19 @@ export async function ingestCapture({
         if (!vScreenshot) continue;
         const vExt = extForMime(vScreenshot.mimeType);
         const vPath = `${appId}/${manifest.buildSha}/${flow.id}/${frame.id}-v${vi + 1}.${vExt}`;
-        const { error: vErr } = await admin.storage
-          .from(SCREENSHOTS_BUCKET)
-          .upload(vPath, vScreenshot.bytes, {
-            contentType: vScreenshot.mimeType,
-            upsert: true,
-          });
-        if (vErr) {
-          // Don't fail the whole push for a version upload error — log it
-          // by skipping the entry. The latest image still made it.
+        try {
+          await r2Put(vPath, vScreenshot.bytes, vScreenshot.mimeType);
+        } catch {
+          // Don't fail the whole push for a version upload error — the
+          // latest image still made it.
           continue;
         }
-        const { data: vPub } = admin.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(vPath);
-        newVersions.push({ image: vPub.publicUrl, capturedAt: v.capturedAt });
+        newVersions.push({ image: r2PublicUrl(vPath), capturedAt: v.capturedAt });
         uploaded++;
       }
       newFrames.push({
         ...frame,
-        image: pub.publicUrl,
+        image: pub,
         video: videoUrl,
         versions: newVersions.length > 0 ? newVersions : undefined,
       });

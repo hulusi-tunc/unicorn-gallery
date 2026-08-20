@@ -128,15 +128,18 @@ export async function hardDeleteArchivedProject(input: {
     .map((f) => extractStoragePath(f.latest_image_url as string | null))
     .filter((p): p is string => Boolean(p));
 
-  // 3) Bulk-delete storage objects (best-effort — orphaned objects are
-  //    annoying but DB rows going first means there's nothing pointing
-  //    at them anyway, so this is cleanup not blocker).
+  // 3) Bulk-delete storage objects (best-effort). Try R2 first (new
+  //    uploads); then Supabase (legacy). Orphaned objects are annoying but
+  //    DB rows going first means nothing points at them, so non-fatal.
   let storageDeleted = 0;
   if (storagePaths.length > 0) {
+    const { r2DeleteMany } = await import('@/lib/r2');
+    storageDeleted += await r2DeleteMany(storagePaths).catch(() => 0);
+    // Legacy: also try Supabase for any old-prefix URLs.
     const { data: removed } = await admin.storage
       .from('screenshots')
       .remove(storagePaths);
-    storageDeleted = removed?.length ?? 0;
+    storageDeleted += removed?.length ?? 0;
   }
 
   // 4) Delete the app row — frames/builds/comments/etc. cascade.
@@ -155,14 +158,19 @@ export async function hardDeleteArchivedProject(input: {
 }
 
 /**
- * Pull the bucket-relative key out of a Supabase storage URL.
- * Example: "https://x.supabase.co/storage/v1/object/public/screenshots/foo/bar.png"
- *   → "foo/bar.png"
- * Returns null for unrecognized URL shapes — those orphan objects, which
- * is fine; we never depend on storage cleanup being perfect.
+ * Pull the bucket-relative key out of a storage URL (R2 or legacy Supabase).
+ * Returns null for unrecognized shapes — orphaned objects are non-fatal.
  */
 function extractStoragePath(url: string | null): string | null {
   if (!url) return null;
+  // R2: https://pub-<hash>.r2.dev/<key>
+  const r2Prefix =
+    process.env['R2_PUBLIC_URL'] ??
+    'https://pub-c3fbfb7655eb4a7589d726cc0dfae691.r2.dev';
+  if (url.startsWith(r2Prefix + '/')) {
+    return url.slice(r2Prefix.length + 1).split('?')[0] ?? null;
+  }
+  // Legacy Supabase: .../public/screenshots/<key>
   const m = /\/screenshots\/(.+?)(?:\?|$)/.exec(url);
   return m?.[1] ?? null;
 }
