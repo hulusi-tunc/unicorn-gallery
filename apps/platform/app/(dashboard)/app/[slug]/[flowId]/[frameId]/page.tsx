@@ -1,12 +1,6 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { CommentsPanel } from '@/components/comments-panel';
-import { Filmstrip } from '@/components/filmstrip';
-import { FrameVersionStage } from '@/components/frame-version-scrubber';
-import { KeyboardNav } from '@/components/keyboard-nav';
-import { MarkFrameRead } from '@/components/mark-frame-read';
-import { RealtimeRefresh } from '@/components/realtime-refresh';
+import { FrameModal } from '@/components/frame-modal';
 import { findOrCreateFrame, listCommentsForFrame } from '@/lib/comments';
 import { imageHref } from '@/lib/image-href';
 import {
@@ -14,21 +8,17 @@ import {
   getBuildByVersion,
   getCurrentProfile,
   getLatestBuild,
-  listFrameCaptures,
   getManifestForApp,
   getMentionableProfilesForApp,
 } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
-const BORDER_LIGHT = 'border-[oklch(0.9_0.007_260)]';
-const BORDER_DARK = 'dark:border-[oklch(0.24_0.008_260)]';
-const TEXT_DISPLAY = 'text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]';
-const TEXT_PRIMARY = 'text-[oklch(0.24_0.01_260)] dark:text-[oklch(0.82_0.012_260)]';
-const TEXT_SECONDARY = 'text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]';
-const TEXT_DISABLED = 'text-[oklch(0.68_0.008_260)] dark:text-[oklch(0.42_0.008_260)]';
-const SURFACE = 'bg-white dark:bg-[oklch(0.175_0.007_260)]';
-
+/**
+ * Hard-navigation fallback for direct URL visits / full page reloads.
+ * Renders the same FrameModal overlay as the intercepting route, with
+ * close navigating to the app landing page instead of router.back().
+ */
 export default async function FramePage({
   params,
   searchParams,
@@ -67,13 +57,7 @@ export default async function FramePage({
   if (idx < 0) notFound();
   const frame = flow.frames[idx]!;
 
-  const prev = idx > 0 ? flow.frames[idx - 1] : undefined;
-  const next = idx < flow.frames.length - 1 ? flow.frames[idx + 1] : undefined;
-  // Preserve `?v=N` across navigation so the user stays in the version
-  // they're browsing as they arrow through frames.
   const versionQuery = isViewingOldVersion ? `?v=${selectedBuild!.version ?? ''}` : '';
-  const frameHref = (id: string): string =>
-    `/app/${encodeURIComponent(app.slug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(id)}${versionQuery}`;
 
   const frameRow = await findOrCreateFrame(
     app.id,
@@ -84,76 +68,29 @@ export default async function FramePage({
     frame.image,
     build?.id ?? null,
   );
-  const [comments, captures] = await Promise.all([
-    listCommentsForFrame(frameRow.id),
-    listFrameCaptures(frameRow.id),
-  ]);
+  const comments = await listCommentsForFrame(frameRow.id);
 
   return (
-    <main className="flex flex-1 overflow-hidden bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
-      <MarkFrameRead frameRowId={frameRow.id} appSlug={app.slug} />
-      <RealtimeRefresh table="comments" filter={`frame_id=eq.${frameRow.id}`} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <KeyboardNav
-          prevHref={prev ? frameHref(prev.id) : undefined}
-          nextHref={next ? frameHref(next.id) : undefined}
-        />
-
-        <div className={`flex items-center gap-3 border-b ${BORDER_LIGHT} ${BORDER_DARK} px-10 py-4`}>
-          <Link
-            href={`/app/${encodeURIComponent(app.slug)}/${encodeURIComponent(flow.id)}`}
-            className={`text-xs ${TEXT_SECONDARY} transition-colors hover:text-[oklch(0.15_0.008_260)] dark:hover:text-[oklch(0.97_0.005_260)]`}
-          >
-            {flow.name}
-          </Link>
-          <span className={TEXT_DISABLED}>/</span>
-          <span className={`text-sm font-medium ${TEXT_DISPLAY}`}>{frame.name}</span>
-          <span className={`ml-auto font-mono text-[13px] tabular-nums ${TEXT_SECONDARY}`}>
-            {String(idx + 1).padStart(2, '0')} / {String(flow.frames.length).padStart(2, '0')}
-          </span>
-        </div>
-
-        <FrameVersionStage
-          captures={captures}
-          initialSrc={imageHref(frame.image)}
-          platform={manifest.platform}
-          frameName={frame.name}
-          prevHref={prev ? frameHref(prev.id) : undefined}
-          prevName={prev?.name}
-          nextHref={next ? frameHref(next.id) : undefined}
-          nextName={next?.name}
-        />
-
-        <div className={`flex items-center gap-3 border-t ${BORDER_LIGHT} ${BORDER_DARK} px-10 py-3 text-[13px] ${TEXT_SECONDARY}`}>
-          <kbd className={`rounded border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} px-1.5 py-0.5 font-mono text-[13px] ${TEXT_PRIMARY}`}>
-            ←
-          </kbd>
-          <kbd className={`rounded border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} px-1.5 py-0.5 font-mono text-[13px] ${TEXT_PRIMARY}`}>
-            →
-          </kbd>
-          <span>navigate</span>
-          <span className={`ml-auto font-mono text-[13px] ${TEXT_SECONDARY}`}>{frame.id}</span>
-        </div>
-
-        <Filmstrip
-          flow={flow}
-          platform={manifest.platform}
-          appSlug={app.slug}
-          activeFrameId={frame.id}
-          versionQuery={versionQuery}
-        />
-      </div>
-
-      <CommentsPanel
-        frameRowId={frameRow.id}
-        comments={comments}
-        isAgency={profile?.role === 'agency'}
-        appSlug={app.slug}
-        appId={app.id}
-        currentUserId={profile?.id ?? null}
-        mentionables={mentionables}
-        readOnly={isViewingOldVersion}
-      />
-    </main>
+    <FrameModal
+      appName={app.name}
+      appIconUrl={app.icon_url}
+      accentColor={app.accent_color}
+      appSlug={app.slug}
+      appId={app.id}
+      platform={manifest.platform}
+      flow={flow}
+      activeFrameId={frame.id}
+      src={imageHref(frame.image)}
+      videoSrc={frame.video}
+      frameName={frame.name}
+      frameRowId={frameRow.id}
+      comments={comments}
+      isAgency={profile?.role === 'agency'}
+      currentUserId={profile?.id ?? null}
+      mentionables={mentionables}
+      readOnly={isViewingOldVersion}
+      versionQuery={versionQuery}
+      closeHref={`/app/${encodeURIComponent(app.slug)}`}
+    />
   );
 }

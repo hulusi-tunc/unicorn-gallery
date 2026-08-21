@@ -127,7 +127,7 @@ export function FlowSidebar({
       }}
     >
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 20, padding: '16px 20px 12px' }}>
+      <div style={{ display: 'flex', gap: 20, padding: '6px 20px 10px' }}>
         {(['screens', 'flows'] as const).map((tab) => {
           const tabParam = searchParams?.get('tab');
           const isActive = tab === 'flows' ? tabParam !== 'screens' : tabParam === 'screens';
@@ -167,7 +167,7 @@ export function FlowSidebar({
       </div>
 
       {/* Search */}
-      <div style={{ padding: '4px 12px 8px' }}>
+      <div style={{ padding: '2px 12px 6px' }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -338,14 +338,21 @@ function FlowLink({
         background: active ? t.surface : 'transparent',
         color: active ? t.textDisplay : t.textPrimary,
         fontSize: depth === 0 ? 14 : 13,
-        fontWeight: active ? 500 : 400,
+        fontWeight: active ? 600 : 400,
         transition: 'background 120ms ease-out, color 120ms ease-out',
+        cursor: 'pointer',
       }}
       onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.background = t.surfaceInk;
+        if (!active) {
+          e.currentTarget.style.background = t.surfaceRaised;
+          e.currentTarget.style.color = t.textDisplay;
+        }
       }}
       onMouseLeave={(e) => {
-        if (!active) e.currentTarget.style.background = 'transparent';
+        if (!active) {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = t.textPrimary;
+        }
       }}
     >
       <span

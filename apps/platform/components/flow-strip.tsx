@@ -1,12 +1,14 @@
 'use client';
 
 import type { ManifestFlow } from '@unicorn-studio/gallery-capture';
-import { ArrowLeft, ArrowRight, Play } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileText, Play } from 'lucide-react';
 import Link from 'next/link';
-import { useRef, useState, useEffect, type ReactNode } from 'react';
+import { useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { DeviceBezel } from '@/components/device-bezel';
+import { UnresolvedBadge } from '@/components/unresolved-badge';
 import { WebCardThumb } from '@/components/web-card-thumb';
 import { imageHref } from '@/lib/image-href';
+import type { FrameUnresolvedSummary } from '@/lib/queries';
 
 export function FlowStrip({
   flow,
@@ -14,12 +16,14 @@ export function FlowStrip({
   isMobile,
   versionQuery,
   parentFlowName,
+  unresolvedByFrame,
 }: {
   flow: ManifestFlow;
   appSlug: string;
   isMobile: boolean;
   versionQuery: string;
   parentFlowName?: string;
+  unresolvedByFrame?: Map<string, FrameUnresolvedSummary>;
 }): ReactNode {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -56,44 +60,21 @@ export function FlowStrip({
       <div className="relative">
         <div
           ref={scrollRef}
-          className="no-scrollbar flex gap-4 overflow-x-auto"
+          className="no-scrollbar flex gap-4 overflow-x-auto py-3 -my-3"
         >
           {flow.frames.map((frame) => {
             const src = imageHref(frame.image);
             const href = `/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(frame.id)}${versionQuery}`;
             return (
-              <Link
+              <FlowStripCard
                 key={frame.id}
                 href={href}
-                className="shrink-0"
-                style={{ width: 'calc(30% - 8px)' }}
-              >
-                <div
-                  className="overflow-hidden rounded-2xl bg-[oklch(0.96_0.004_260)] dark:bg-[oklch(0.19_0.007_260)]"
-                  style={{ aspectRatio: isMobile ? '3 / 4' : '16 / 10' }}
-                >
-                  {isMobile ? (
-                    <div className="flex h-full items-center justify-center">
-                      <DeviceBezel
-                        src={src}
-                        alt={frame.name}
-                        style={{ height: '80%' }}
-                      />
-                      {frame.video ? (
-                        <span className="absolute bottom-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm">
-                          <Play size={13} fill="currentColor" />
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <WebCardThumb
-                      src={src}
-                      alt={frame.name}
-                      hasVideo={!!frame.video}
-                    />
-                  )}
-                </div>
-              </Link>
+                src={src}
+                videoSrc={frame.video}
+                name={frame.name}
+                isMobile={isMobile}
+                unresolved={unresolvedByFrame?.get(frame.id) ?? null}
+              />
             );
           })}
         </div>
@@ -136,5 +117,115 @@ export function FlowStrip({
         </p>
       </div>
     </div>
+  );
+}
+
+/** Single card in the flow strip with hover-to-play for videos */
+function FlowStripCard({
+  href,
+  src,
+  videoSrc,
+  name,
+  isMobile,
+  unresolved,
+}: {
+  href: string;
+  src: string;
+  videoSrc?: string;
+  name: string;
+  isMobile: boolean;
+  unresolved: FrameUnresolvedSummary | null;
+}): ReactNode {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hovering, setHovering] = useState(false);
+  const [isFullPage, setIsFullPage] = useState(false);
+
+  const onEnter = useCallback(() => {
+    setHovering(true);
+    if (videoSrc && videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [videoSrc]);
+
+  const onLeave = useCallback(() => {
+    setHovering(false);
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
+  }, []);
+
+  return (
+    <Link
+      href={href}
+      className="shrink-0"
+      style={{ width: 'calc(30% - 8px)' }}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+    >
+      <div
+        className="relative overflow-hidden rounded-2xl bg-[oklch(0.96_0.004_260)] transition-all duration-200 hover:scale-[1.02] dark:bg-[oklch(0.19_0.007_260)]"
+        style={{ aspectRatio: isMobile ? '3 / 4' : '16 / 10' }}
+      >
+        {/* Unresolved comment badge */}
+        {unresolved && unresolved.count > 0 ? (
+          <UnresolvedBadge
+            count={unresolved.count}
+            preview={unresolved.preview}
+            offsetForUpdated={false}
+          />
+        ) : null}
+
+        {isMobile ? (
+          <div className="flex h-full items-center justify-center">
+            <DeviceBezel
+              src={src}
+              alt={name}
+              style={{ height: '80%' }}
+            />
+          </div>
+        ) : (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={src}
+              alt={name}
+              loading="lazy"
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth > 0) setIsFullPage(img.naturalHeight / img.naturalWidth >= 1.4);
+              }}
+              className={`block h-full w-full object-cover object-top ${videoSrc && hovering ? 'invisible' : ''}`}
+            />
+            {/* Video overlay on hover */}
+            {videoSrc ? (
+              <video
+                ref={videoRef}
+                src={videoSrc}
+                muted
+                loop
+                playsInline
+                className={`absolute inset-0 h-full w-full object-cover object-top ${hovering ? 'visible' : 'invisible'}`}
+              />
+            ) : null}
+          </>
+        )}
+
+        {/* Full-page badge */}
+        {isFullPage && !isMobile ? (
+          <span className="absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-[13px] font-medium text-white backdrop-blur-sm">
+            <FileText size={13} />
+            Full page
+          </span>
+        ) : null}
+
+        {/* Video badge */}
+        {videoSrc ? (
+          <span className="absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm">
+            <Play size={13} fill="currentColor" />
+          </span>
+        ) : null}
+      </div>
+    </Link>
   );
 }

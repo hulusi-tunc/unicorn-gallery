@@ -49,7 +49,7 @@ export function Filmstrip({
   return (
     <div
       ref={containerRef}
-      className="no-scrollbar flex shrink-0 items-end gap-3 overflow-x-auto border-t border-neutral-200 bg-neutral-50/60 px-10 py-4 dark:border-neutral-800/60 dark:bg-neutral-950/60"
+      className="no-scrollbar flex shrink-0 items-end gap-2.5 overflow-x-auto border-t border-[oklch(0.9_0.007_260)] bg-[oklch(0.97_0.004_260)] px-6 py-3 dark:border-white/5 dark:bg-[oklch(0.14_0.006_260)]"
     >
       {flow.frames.map((frame, i) => (
         <FilmstripCell
@@ -93,10 +93,10 @@ function FilmstripCell({
       replace={replace}
       href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flowId)}/${encodeURIComponent(frame.id)}${versionQuery}`}
       className={cn(
-        'group flex shrink-0 flex-col items-center gap-1.5 rounded-md p-1.5 transition-colors',
+        'group flex shrink-0 flex-col items-center gap-1.5 rounded-lg p-1.5 transition-colors',
         active
-          ? 'bg-neutral-200/60 dark:bg-neutral-800/60'
-          : 'hover:bg-neutral-200/40 dark:hover:bg-neutral-900/60',
+          ? 'bg-[oklch(0.92_0.006_260)] dark:bg-white/8'
+          : 'hover:bg-[oklch(0.94_0.005_260)] dark:hover:bg-white/5',
       )}
       title={frame.name}
     >
@@ -106,8 +106,9 @@ function FilmstripCell({
           alt={frame.name}
           style={{
             height: MOBILE_CELL_HEIGHT,
-            transition: 'filter 200ms ease-out, transform 200ms ease-out',
+            transition: 'filter 200ms ease-out, transform 200ms ease-out, opacity 200ms ease-out',
             transform: active ? 'scale(1.04)' : 'scale(1)',
+            opacity: active ? 1 : 0.6,
             filter: active
               ? 'drop-shadow(0 6px 12px rgba(15,15,20,0.25))'
               : 'drop-shadow(0 2px 4px rgba(15,15,20,0.12))',
@@ -117,8 +118,8 @@ function FilmstripCell({
         <div
           style={{ height: WEB_CELL_HEIGHT, width: WEB_CELL_WIDTH, position: 'relative' }}
           className={cn(
-            'overflow-hidden rounded transition-all',
-            active ? 'ring-2 ring-[oklch(0.5_0.22_254)]' : '',
+            'overflow-hidden rounded-md transition-all',
+            active ? 'ring-2 ring-[oklch(0.15_0.008_260)] dark:ring-white/30' : 'opacity-60 hover:opacity-100',
           )}
         >
           <Image
@@ -134,7 +135,7 @@ function FilmstripCell({
       <span
         className={cn(
           'font-mono text-[9px] tabular-nums',
-          active ? 'text-neutral-700 dark:text-neutral-300' : 'text-neutral-400 dark:text-neutral-600',
+          active ? 'text-[oklch(0.35_0.01_260)] dark:text-white/60' : 'text-[oklch(0.65_0.01_260)] dark:text-white/25',
         )}
       >
         {String(step).padStart(2, '0')}

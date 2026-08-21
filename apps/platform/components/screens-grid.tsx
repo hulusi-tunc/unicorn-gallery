@@ -42,7 +42,7 @@ export function ScreensGrid({
           >
             {/* Card container */}
             <div
-              className="relative overflow-hidden rounded-2xl bg-[oklch(0.96_0.004_260)] transition-all hover:shadow-lg hover:ring-1 hover:ring-[oklch(0.85_0.008_260)] dark:bg-[oklch(0.19_0.007_260)] dark:hover:ring-[oklch(0.3_0.008_260)]"
+              className="relative overflow-hidden rounded-2xl bg-[oklch(0.96_0.004_260)] transition-all duration-200 group-hover:scale-[1.02] dark:bg-[oklch(0.19_0.007_260)]"
               style={{ aspectRatio: isMobile ? '3 / 4' : '16 / 10' }}
             >
               {unresolved && unresolved.count > 0 ? (

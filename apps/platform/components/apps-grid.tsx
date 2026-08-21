@@ -2,7 +2,7 @@
 
 import { SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { AppCard } from '@/components/app-card';
 import { EmptyState } from '@/components/empty-state';
 import type { AppRowWithStaff } from '@/lib/db';
@@ -25,8 +25,15 @@ export function AppsGrid({
   isAgency: boolean;
   myId: string;
 }): ReactNode {
-  const [platform, setPlatform] = useState<PlatformFilter>('all');
+  const [platform, setPlatform] = useState<PlatformFilter>(() => {
+    if (typeof window === 'undefined') return 'mobile';
+    return (localStorage.getItem('us:platform-filter') as PlatformFilter) || 'mobile';
+  });
   const [staff, setStaff] = useState<StaffFilter>('all');
+
+  useEffect(() => {
+    localStorage.setItem('us:platform-filter', platform);
+  }, [platform]);
 
   const filtered = useMemo(() => {
     let result = apps;

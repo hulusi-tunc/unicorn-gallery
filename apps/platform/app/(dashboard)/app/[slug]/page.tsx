@@ -139,7 +139,7 @@ export default async function AppOverviewPage({
           versionQuery={versionQuery}
         />
       ) : (
-        <div className="flex flex-col gap-20 py-10">
+        <div className="flex flex-col gap-20 py-4">
           {tree.map((node) => (
             <FlowSection
               key={node.flow.id}
@@ -203,6 +203,7 @@ function FlowSection({
           isMobile={isMobile}
           versionQuery={versionQuery}
           parentFlowName={parentName}
+          unresolvedByFrame={unresolvedByFrame}
         />
       ) : null}
 

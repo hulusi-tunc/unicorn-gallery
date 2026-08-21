@@ -89,9 +89,12 @@ export function UnresolvedBadge({
   return (
     <span
       ref={anchorRef}
-      className={`absolute z-20 inline-flex items-center gap-1 rounded-full bg-[oklch(0.7_0.18_55)] px-2 py-0.5 font-mono text-[13px] font-semibold tabular-nums text-white shadow-md dark:bg-[oklch(0.65_0.19_55)] ${
-        offsetForUpdated ? 'right-1 top-5' : '-top-2 right-1'
+      className={`absolute z-20 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium tabular-nums text-white shadow-lg backdrop-blur-sm ${
+        offsetForUpdated ? 'right-2 top-6' : 'right-2.5 top-2.5'
       }`}
+      style={{
+        background: 'rgba(0, 0, 0, 0.60)',
+      }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
@@ -101,11 +104,11 @@ export function UnresolvedBadge({
       aria-label={`${count} unresolved comment${count === 1 ? '' : 's'}`}
     >
       <svg
-        width="10"
-        height="10"
+        width="14"
+        height="14"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="currentColor"
+        stroke="oklch(0.75 0.18 55)"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -124,56 +127,37 @@ export function UnresolvedBadge({
                 position: 'fixed',
                 top: pos.top,
                 left: pos.left,
-                width: 340,
-                background: '#ffffff',
-                border: `1px solid ${t.border}`,
-                borderRadius: 10,
-                boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
-                padding: 14,
+                width: 320,
+                background: t.black,
+                borderRadius: 14,
+                boxShadow: '0 16px 48px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.06)',
+                padding: 16,
                 zIndex: 9999,
                 textAlign: 'left',
                 cursor: 'default',
                 fontFamily: editorialFonts.body,
               }}
             >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.75 0.18 55)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <span style={{ fontSize: 13, fontWeight: 600, color: t.textDisplay }}>
+                  {count} open comment{count === 1 ? '' : 's'}
+                </span>
+              </div>
               <div
                 style={{
                   display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'space-between',
-                  marginBottom: 10,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: t.textPrimary,
-                  }}
-                >
-                  {count} open comment{count === 1 ? '' : 's'}
-                </span>
-                {count > preview.length ? (
-                  <span style={{ fontSize: 11, color: t.textDisabled }}>
-                    showing {preview.length}
-                  </span>
-                ) : null}
-              </div>
-              <ul
-                style={{
-                  display: 'flex',
                   flexDirection: 'column',
-                  gap: 14,
-                  listStyle: 'none',
-                  margin: 0,
-                  padding: 0,
+                  gap: 8,
                 }}
               >
                 {preview.map((p, i) => (
-                  <li
+                  <div
                     // eslint-disable-next-line react/no-array-index-key
                     key={i}
-                    style={{ display: 'flex', gap: 12 }}
+                    style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 10, background: t.surface }}
                   >
                     <UserAvatar
                       name={p.authorName}
@@ -194,7 +178,7 @@ export function UnresolvedBadge({
                       >
                         <span
                           style={{
-                            fontSize: 12,
+                            fontSize: 13,
                             fontWeight: 500,
                             color: t.textPrimary,
                           }}
@@ -203,7 +187,7 @@ export function UnresolvedBadge({
                         </span>
                         <span
                           style={{
-                            fontSize: 10,
+                            fontSize: 13,
                             color: t.textDisabled,
                           }}
                         >
@@ -213,7 +197,7 @@ export function UnresolvedBadge({
                       <p
                         style={{
                           margin: '4px 0 0',
-                          fontSize: 14,
+                          fontSize: 13,
                           color: t.textPrimary,
                           whiteSpace: 'pre-wrap',
                           wordBreak: 'break-word',
@@ -229,21 +213,21 @@ export function UnresolvedBadge({
                       <p
                         style={{
                           margin: '6px 0 0',
-                          fontSize: 10,
+                          fontSize: 13,
                           color: t.textDisabled,
                         }}
                       >
                         {formatDateLabel(p.createdAt)}
                       </p>
                     </div>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
               {count > preview.length ? (
                 <p
                   style={{
                     margin: '12px 0 0',
-                    fontSize: 11,
+                    fontSize: 13,
                     color: t.textSecondary,
                   }}
                 >

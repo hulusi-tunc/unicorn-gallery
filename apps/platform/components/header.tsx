@@ -118,17 +118,17 @@ export function AppHeader({
           iconUrl={app.icon_url}
           accent={accent}
           canEdit={canEdit}
-          size={56}
+          size={72}
         />
 
         <h1
           style={{
             margin: '20px 0 0',
             fontFamily: editorialFonts.display,
-            fontSize: 32,
+            fontSize: 38,
             fontWeight: 600,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.15,
+            letterSpacing: '-0.025em',
+            lineHeight: 1.1,
             color: t.textDisplay,
           }}
         >
