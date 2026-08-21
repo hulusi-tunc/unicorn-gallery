@@ -62,17 +62,20 @@ export function ShareButton(props: ShareButtonProps): ReactNode {
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
-          height: 26,
-          padding: '0 12px',
+          height: 34,
+          padding: '0 14px',
           borderRadius: 999,
-          border: 'none',
-          background: t.accent,
-          color: 'white',
+          border: `1px solid ${t.borderVisible}`,
+          background: t.surface,
+          color: t.textPrimary,
           fontFamily: editorialFonts.body,
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: 500,
           cursor: 'pointer',
+          transition: 'background 120ms ease-out',
         }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = t.surfaceRaised; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = t.surface; }}
       >
         <Share2 size={12} /> Share
       </button>

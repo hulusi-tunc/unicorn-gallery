@@ -1,31 +1,31 @@
 'use client';
 
+import { FileText, Play } from 'lucide-react';
 import { useState } from 'react';
 
 /**
- * Thumbnail for a web frame card. Detects tall/full-page snaps on image
- * load (aspect ratio > ~1.4 = visibly taller than wide) and renders a
- * "FULL PAGE" badge + a bottom fade so the user can tell at a glance
- * that the snap continues below the fold. Keeps the same fixed footprint
- * as viewport-only cards so the journey strip stays uniform.
+ * Thumbnail for a web frame card. Fills its parent container, detects
+ * tall/full-page snaps and shows indicators.
  */
 export function WebCardThumb({
   src,
   alt,
   width,
   height,
+  hasVideo,
 }: {
   src: string;
   alt: string;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
+  hasVideo?: boolean;
 }): React.ReactNode {
   const [isFullPage, setIsFullPage] = useState(false);
 
   return (
     <div
-      style={{ width, height, position: 'relative' }}
-      className="overflow-hidden rounded-md bg-neutral-50 shadow-md transition-all group-hover:shadow-xl dark:bg-neutral-900"
+      style={{ width: width ?? '100%', height: height ?? '100%', position: 'relative' }}
+      className="overflow-hidden rounded-md bg-neutral-50 transition-all dark:bg-neutral-900"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -46,19 +46,32 @@ export function WebCardThumb({
           objectPosition: 'top center',
         }}
       />
+
+      {/* Full-page indicator */}
       {isFullPage ? (
         <>
           <span
-            className="pointer-events-none absolute left-2 top-2 z-10 rounded bg-black/65 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-white"
-            title="Full-page capture — click to scroll"
+            className="pointer-events-none absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5 rounded-md bg-black/60 px-2.5 py-1 text-[13px] font-medium text-white backdrop-blur-sm"
+            title="Full-page capture - scroll to see more"
           >
-            FULL PAGE
+            <FileText size={13} />
+            Full page
           </span>
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/45 via-black/15 to-transparent"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/40 to-transparent"
           />
         </>
+      ) : null}
+
+      {/* Video indicator */}
+      {hasVideo ? (
+        <span
+          className="pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm"
+          title="Has a motion clip"
+        >
+          <Play size={13} fill="currentColor" />
+        </span>
       ) : null}
     </div>
   );

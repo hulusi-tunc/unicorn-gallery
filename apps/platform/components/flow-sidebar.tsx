@@ -110,28 +110,71 @@ export function FlowSidebar({
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
-        borderRight: `1px solid ${t.border}`,
         background: t.black,
         fontFamily: editorialFonts.body,
-        // Scroll internally so a tall flow tree doesn't push the layout
-        // and the rail stays put while main content scrolls.
+        position: 'sticky',
+        top: 0,
+        alignSelf: 'flex-start',
+        maxHeight: 'calc(100vh - 60px)',
         overflowY: 'auto',
-        position: 'relative',
+        overflowX: 'hidden',
         userSelect: resizing ? 'none' : undefined,
       }}
     >
-      <div
-        style={{
-          padding: '20px 20px 8px',
-          fontFamily: editorialFonts.mono,
-          fontSize: 11,
-          fontWeight: 500,
-          letterSpacing: '0.08em',
-          
-          color: t.textSecondary,
-        }}
-      >
-        Flows
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 20, padding: '16px 20px 12px' }}>
+        {(['screens', 'flows'] as const).map((tab) => {
+          const tabParam = searchParams?.get('tab');
+          const isActive = tab === 'flows' ? tabParam !== 'screens' : tabParam === 'screens';
+          const href = tab === 'flows'
+            ? `/app/${encodeURIComponent(appSlug)}${versionQuery}`
+            : `/app/${encodeURIComponent(appSlug)}?tab=screens${versionParam ? `&v=${versionParam}` : ''}`;
+          return (
+            <Link
+              key={tab}
+              href={href}
+              style={{
+                position: 'relative',
+                fontFamily: editorialFonts.body,
+                fontSize: 14,
+                fontWeight: isActive ? 600 : 400,
+                color: isActive ? t.textDisplay : t.textSecondary,
+                textDecoration: 'none',
+                paddingBottom: 8,
+                transition: 'color 120ms ease-out',
+              }}
+            >
+              {tab === 'screens' ? 'Screens' : 'Flows'}
+              {isActive ? (
+                <span style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: 2,
+                  borderRadius: 1,
+                  background: t.textDisplay,
+                }} />
+              ) : null}
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* Search */}
+      <div style={{ padding: '4px 12px 8px' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '6px 12px',
+          borderRadius: 8,
+          background: t.surface,
+          fontSize: 13,
+          color: t.textDisabled,
+        }}>
+          Search...
+        </div>
       </div>
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '0 8px 16px' }}>
         {manifest.flows.length === 0 ? (

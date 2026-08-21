@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 import type { ManifestFlow } from '@unicorn-studio/gallery-capture';
 import type { DetailTab } from '@/components/header';
 import { EmptyState } from '@/components/empty-state';
+import { FlowStrip } from '@/components/flow-strip';
 import { HashScroller } from '@/components/hash-scroller';
-import { JourneyStrip } from '@/components/journey-strip';
 import { ScreensGrid } from '@/components/screens-grid';
 import {
   type FrameUnresolvedSummary,
@@ -85,7 +85,7 @@ export default async function AppOverviewPage({
     selectedBuild?.version != null ? `?v=${selectedBuild.version}` : '';
 
   return (
-    <main className="flex flex-1 flex-col overflow-y-auto bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
+    <main className="relative flex flex-1 flex-col pl-8 bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
       <HashScroller />
 
       {activeTab === 'screens' ? (
@@ -97,7 +97,7 @@ export default async function AppOverviewPage({
           versionQuery={versionQuery}
         />
       ) : (
-        <div className="flex flex-col gap-12 px-2 py-8">
+        <div className="flex flex-col gap-20 py-10">
           {tree.map((node) => (
             <FlowSection
               key={node.flow.id}
@@ -111,6 +111,7 @@ export default async function AppOverviewPage({
           ))}
         </div>
       )}
+
     </main>
   );
 }
@@ -120,6 +121,7 @@ function FlowSection({
   platform,
   appSlug,
   isSub,
+  parentName,
   unresolvedByFrame,
   versionQuery,
 }: {
@@ -127,70 +129,44 @@ function FlowSection({
   platform: 'ios' | 'android' | 'web';
   appSlug: string;
   isSub: boolean;
+  parentName?: string;
   unresolvedByFrame: Map<string, FrameUnresolvedSummary>;
   versionQuery: string;
 }): ReactNode {
-  // A flow with no frames is a container — used purely to group child
-  // sub-flows under one header. Skip the JourneyStrip (an empty horizontal
-  // band the user reads as "image goes here") and render a compact section
-  // heading instead. The child sub-flows below still render normally.
   const isContainer = node.flow.frames.length === 0;
+  const isMobile = platform !== 'web';
 
   return (
     <section
       id={`flow-${node.flow.id}`}
-      // scroll-mt offsets the sticky/top chrome so the anchor lands the
-      // section header just below it instead of behind the bar.
-      className={
-        isSub
-          ? 'ml-10 scroll-mt-24 border-l-2 border-[oklch(0.92_0.01_260)] pl-6 dark:border-[oklch(0.26_0.01_260)]'
-          : 'scroll-mt-24'
-      }
+      className="scroll-mt-24"
     >
-      <div
-        className={
-          isSub
-            ? 'flex items-baseline justify-between px-2 pb-2'
-            : `flex items-baseline justify-between px-8 ${isContainer ? 'pb-0' : 'pb-3'}`
-        }
-      >
-        <div>
-          <h2
-            className={
-              isSub
-                ? 'text-sm font-semibold tracking-tight text-[oklch(0.20_0.008_260)] dark:text-[oklch(0.92_0.005_260)]'
-                : 'text-base font-semibold tracking-tight text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]'
-            }
-          >
+      {/* Container heading (parent flow with no frames of its own) */}
+      {isContainer ? (
+        <div className="mb-6 pl-1">
+          <h2 className="text-lg font-semibold tracking-tight text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]">
             {node.flow.name}
           </h2>
-          <p className="mt-0.5 font-mono text-[13px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-            {node.flow.id}
+          <p className="mt-1 text-[13px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
+            {node.children.length} sub-flow{node.children.length === 1 ? '' : 's'}
           </p>
         </div>
-        {isContainer ? (
-          node.children.length > 0 ? (
-            <span className="text-xs text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-              {node.children.length} sub-flow{node.children.length === 1 ? '' : 's'}
-            </span>
-          ) : null
-        ) : (
-          <span className="text-xs text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-            {node.flow.frames.length} frame{node.flow.frames.length === 1 ? '' : 's'}
-          </span>
-        )}
-      </div>
-      {isContainer ? null : (
-        <JourneyStrip
+      ) : null}
+
+      {/* Flow strip with frames */}
+      {!isContainer && node.flow.frames.length > 0 ? (
+        <FlowStrip
           flow={node.flow}
-          platform={platform}
           appSlug={appSlug}
-          unresolvedByFrame={unresolvedByFrame}
+          isMobile={isMobile}
           versionQuery={versionQuery}
+          parentFlowName={parentName}
         />
-      )}
-      {node.children.length > 0 && (
-        <div className={`${isContainer ? 'mt-3' : 'mt-6'} flex flex-col gap-8`}>
+      ) : null}
+
+      {/* Sub-flows - indented under the parent */}
+      {node.children.length > 0 ? (
+        <div className={`${isContainer ? '' : 'mt-16'} ml-6 flex flex-col gap-14 border-l-2 border-[oklch(0.92_0.005_260)] pl-6 dark:border-[oklch(0.24_0.008_260)]`}>
           {node.children.map((child) => (
             <FlowSection
               key={child.flow.id}
@@ -198,12 +174,13 @@ function FlowSection({
               platform={platform}
               appSlug={appSlug}
               isSub={true}
+              parentName={node.flow.name}
               unresolvedByFrame={unresolvedByFrame}
               versionQuery={versionQuery}
             />
           ))}
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

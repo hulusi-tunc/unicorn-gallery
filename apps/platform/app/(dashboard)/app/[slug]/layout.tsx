@@ -100,7 +100,7 @@ export default async function AppLayout({
     : 0;
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 60px)' }}>
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 60px)', overflow: 'auto' }}>
       <AppHeader
         app={app}
         manifest={manifest}
@@ -114,11 +114,11 @@ export default async function AppLayout({
         frameCount={frameCount}
       />
       <VersionBanner />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="mx-auto flex w-[80%] flex-1 gap-0">
         {manifest ? (
           <FlowSidebar manifest={manifest} appSlug={app.slug} unreadByFlow={unresolvedByFlow} />
         ) : null}
-        <div className="flex flex-1 overflow-hidden">{children}</div>
+        <div className="flex flex-1">{children}</div>
       </div>
       {modal}
     </div>

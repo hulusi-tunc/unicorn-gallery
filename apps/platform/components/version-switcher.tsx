@@ -68,17 +68,17 @@ export function VersionSwitcher({ appSlug, builds }: VersionSwitcherProps): Reac
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
-            height: 22,
-            padding: '0 10px',
+            height: 34,
+            padding: '0 14px',
             borderRadius: 999,
-            border: `1px solid ${t.border}`,
-            background: isLatestSelected ? t.surface : t.accentSubtle,
-            color: isLatestSelected ? t.textPrimary : t.accent,
-            fontFamily: editorialFonts.mono,
-            fontSize: 10,
-            letterSpacing: '0.04em',
+            border: `1px solid ${t.borderVisible}`,
+            background: t.surface,
+            color: t.textPrimary,
+            fontFamily: editorialFonts.body,
+            fontSize: 13,
+            fontWeight: 500,
             cursor: 'pointer',
-            transition: 'background 200ms ease-out, color 200ms ease-out',
+            transition: 'background 120ms ease-out',
           }}
         >
           <History size={11} />
@@ -86,14 +86,7 @@ export function VersionSwitcher({ appSlug, builds }: VersionSwitcherProps): Reac
             {triggerLabel}
           </span>
           {!isLatestSelected ? (
-            <span
-              style={{
-                fontSize: 9,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                opacity: 0.85,
-              }}
-            >
+            <span style={{ fontSize: 13, opacity: 0.6 }}>
               · viewing
             </span>
           ) : null}

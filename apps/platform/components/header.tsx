@@ -80,50 +80,96 @@ export function AppHeader({
     return qs ? `${basePath}?${qs}` : basePath;
   };
 
-  const backLink: CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    fontFamily: editorialFonts.mono,
-    fontSize: 11,
-    letterSpacing: '0.06em',
-    
-    color: t.textSecondary,
-    textDecoration: 'none',
-    transition: 'color 200ms ease-out',
-  };
-
   const tabStyle = (active: boolean): CSSProperties => ({
     position: 'relative',
-    paddingBottom: 12,
-    marginBottom: -1,
+    padding: '8px 0',
     fontFamily: editorialFonts.body,
     fontSize: 14,
-    fontWeight: 500,
+    fontWeight: active ? 500 : 400,
     textDecoration: 'none',
     color: active ? t.textDisplay : t.textSecondary,
-    borderBottom: `2px solid ${active ? t.textDisplay : 'transparent'}`,
     transition: 'color 160ms ease-out',
   });
+
+  const tabUnderline: CSSProperties = {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    background: t.textDisplay,
+    borderRadius: 1,
+  };
 
   return (
     <header
       style={{
         display: 'flex',
         flexDirection: 'column',
-        padding: '16px 24px 0',
-        borderBottom: `1px solid ${t.border}`,
         background: t.black,
         fontFamily: editorialFonts.body,
       }}
     >
-      {/* Row 1 — back link + actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-        <Link href="/apps" style={backLink} title="All apps">
-          <ChevronLeft size={14} /> Apps
-        </Link>
+      {/* Hero area - Mobbin style: icon above name */}
+      <div style={{ width: '80%', margin: '0 auto', paddingTop: 32, paddingBottom: 24 }}>
+        <EditProjectButton
+          appSlug={app.slug}
+          appName={app.name}
+          iconUrl={app.icon_url}
+          accent={accent}
+          canEdit={canEdit}
+          size={72}
+        />
 
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <h1
+          style={{
+            margin: '20px 0 0',
+            fontFamily: editorialFonts.display,
+            fontSize: 32,
+            fontWeight: 600,
+            letterSpacing: '-0.02em',
+            lineHeight: 1.15,
+            color: t.textDisplay,
+          }}
+        >
+          {app.name}
+          {app.tagline ? (
+            <>
+              <br />
+              <span style={{ fontWeight: 400 }}>{app.tagline}</span>
+            </>
+          ) : null}
+        </h1>
+
+        {/* Metadata row */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 32, marginTop: 20, flexWrap: 'wrap' }}>
+          <MetaField label="Platform" t={t}>
+            {PLATFORM_LABEL[app.platform]}
+          </MetaField>
+          <StaffField
+            appId={app.id}
+            appSlug={app.slug}
+            field="designer_id"
+            label="Designer"
+            person={app.designer}
+            agencyProfiles={agencyProfiles}
+            canEdit={canEdit}
+            t={t}
+          />
+          <StaffField
+            appId={app.id}
+            appSlug={app.slug}
+            field="pm_id"
+            label="PM"
+            person={app.pm}
+            agencyProfiles={agencyProfiles}
+            canEdit={canEdit}
+            t={t}
+          />
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20 }}>
           {builds.length > 0 ? <VersionSwitcher appSlug={app.slug} builds={builds} /> : null}
           {canEdit ? (
             <>
@@ -140,104 +186,6 @@ export function AppHeader({
           ) : null}
         </div>
       </div>
-
-      {/* Row 2 — app icon + name/tagline */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 18 }}>
-        <EditProjectButton
-          appSlug={app.slug}
-          appName={app.name}
-          iconUrl={app.icon_url}
-          accent={accent}
-          canEdit={canEdit}
-          size={56}
-        />
-        <h1
-          style={{
-            margin: 0,
-            fontFamily: editorialFonts.display,
-            fontSize: 24,
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.1,
-            color: t.textDisplay,
-          }}
-        >
-          {app.name}
-          {app.tagline ? (
-            <span style={{ color: t.textSecondary, fontWeight: 400 }}> — {app.tagline}</span>
-          ) : null}
-        </h1>
-      </div>
-
-      {/* Row 3 — quiet metadata columns (Mobbin-style) */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '12px 40px',
-          flexWrap: 'wrap',
-          marginTop: 20,
-        }}
-      >
-        <MetaField label="Platform" t={t}>
-          {PLATFORM_LABEL[app.platform]}
-        </MetaField>
-        <StaffField
-          appId={app.id}
-          appSlug={app.slug}
-          field="designer_id"
-          label="Designer"
-          person={app.designer}
-          agencyProfiles={agencyProfiles}
-          canEdit={canEdit}
-          t={t}
-        />
-        <StaffField
-          appId={app.id}
-          appSlug={app.slug}
-          field="pm_id"
-          label="PM"
-          person={app.pm}
-          agencyProfiles={agencyProfiles}
-          canEdit={canEdit}
-          t={t}
-        />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <MetaLabel t={t}>Members</MetaLabel>
-          <ProjectMembers
-            appId={app.id}
-            appSlug={app.slug}
-            members={members}
-            agencyProfiles={agencyProfiles}
-            canEdit={canEdit}
-            t={t}
-          />
-        </div>
-      </div>
-
-      {/* Row 3 — tabs + count */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 18 }}>
-        <nav style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <Link href={tabHref('screens')} style={tabStyle(activeTab === 'screens')}>
-            Screens
-          </Link>
-          <Link href={tabHref('flows')} style={tabStyle(activeTab === 'flows')}>
-            Flows
-          </Link>
-        </nav>
-        <span
-          style={{
-            paddingBottom: 12,
-            fontFamily: editorialFonts.mono,
-            fontSize: 11,
-            color: t.textSecondary,
-          }}
-        >
-          {activeTab === 'flows'
-            ? `${flowCount} flow${flowCount === 1 ? '' : 's'}`
-            : `${frameCount} screen${frameCount === 1 ? '' : 's'}`}
-        </span>
-      </div>
     </header>
   );
 }
@@ -252,10 +200,8 @@ function MetaLabel({
   return (
     <span
       style={{
-        fontFamily: editorialFonts.mono,
-        fontSize: 10,
-        letterSpacing: '0.1em',
-        
+        fontFamily: editorialFonts.body,
+        fontSize: 13,
         color: t.textDisabled,
       }}
     >

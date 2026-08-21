@@ -78,14 +78,14 @@ export function AppActionsMenu({
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            border: `1px solid ${t.border}`,
+            width: 34,
+            height: 34,
+            borderRadius: 999,
+            border: `1px solid ${t.borderVisible}`,
             background: t.surface,
             color: t.textSecondary,
             cursor: 'pointer',
-            transition: 'background 160ms ease-out, color 160ms ease-out',
+            transition: 'background 120ms ease-out, color 120ms ease-out',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = t.surfaceRaised;
