@@ -4,11 +4,11 @@
   "buildCommand": "cd ../.. && pnpm --filter @unicorn-studio/gallery-capture build && pnpm --filter @unicorn-studio/gallery-platform build",
   "functions": {
     "app/api/projects/[slug]/download-pdf/route.ts": {
-      "memory": 3009,
+      "memory": 2048,
       "maxDuration": 120
     },
     "app/api/projects/[slug]/download-pngs/route.ts": {
-      "memory": 3009,
+      "memory": 2048,
       "maxDuration": 120
     }
   },

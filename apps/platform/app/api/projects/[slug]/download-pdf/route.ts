@@ -102,10 +102,11 @@ export async function GET(
         .filter((g) => g.frames.length > 0)
     : [];
 
-  // Single flat fetch keeps concurrency bounded across the whole job, rather
-  // than re-doing it per flow.
+  // Fetch images in small batches (2 concurrent) to stay under the 2 GB
+  // memory cap on Vercel Hobby. Each batch is embedded into the PDF and
+  // then the byte arrays become eligible for GC before the next batch.
   const allUrls = flowGroups.flatMap((g) => g.frames.map((f) => f.imageUrl));
-  const allImages = await fetchImagesBounded(allUrls, 8);
+  const allImages = await fetchImagesBounded(allUrls, 2);
 
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${app.name} — Screens`);
