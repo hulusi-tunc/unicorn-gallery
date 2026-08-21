@@ -1,25 +1,15 @@
 'use client';
 
 import type { ManifestFlow, Platform } from '@unicorn-studio/gallery-capture';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ExternalLink, Link2, MessageCircle, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { type ReactNode, useCallback, useEffect } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { CommentsPanel } from '@/components/comments-panel';
 import { DeviceBezel } from '@/components/device-bezel';
-import { Filmstrip } from '@/components/filmstrip';
 import type { CommentWithAuthor } from '@/lib/comments';
 import type { MentionableProfile } from '@/lib/queries';
 
-/**
- * Full-screen overlay viewer for a single frame — the read/review surface
- * that opens when a frame card is clicked (via an intercepting route), instead
- * of navigating to the chrome-heavy detail subpage. Layout mirrors Mobbin's
- * screen modal: a large, scrollable image in the center with prev/next arrows,
- * the live comment thread on the right, and a filmstrip of the other screens in
- * the same flow along the bottom to jump between them. Esc / backdrop / X close
- * it (router.back returns to the flow grid the user came from).
- */
 export function FrameModal({
   appName,
   appIconUrl,
@@ -49,7 +39,6 @@ export function FrameModal({
   flow: ManifestFlow;
   activeFrameId: string;
   src: string;
-  /** Motion clip URL (mp4/webm). When set, plays in place of the still. */
   videoSrc?: string;
   frameName: string;
   frameRowId: string;
@@ -62,6 +51,7 @@ export function FrameModal({
 }): ReactNode {
   const router = useRouter();
   const isMobile = platform !== 'web';
+  const [showComments, setShowComments] = useState(false);
 
   const idx = flow.frames.findIndex((f) => f.id === activeFrameId);
   const total = flow.frames.length;
@@ -76,27 +66,14 @@ export function FrameModal({
 
   const close = useCallback(() => router.back(), [router]);
 
-  // Keyboard: Esc closes, ←/→ steps through frames. Ignore when focus is in
-  // the comment composer so arrow keys / typing there aren't hijacked.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const el = e.target as HTMLElement | null;
-      const typing =
-        el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable;
-      if (e.key === 'Escape') {
-        close();
-        return;
-      }
+      const typing = el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable;
+      if (e.key === 'Escape') { close(); return; }
       if (typing) return;
-      // replace (not push) so stepping through screens keeps the modal as a
-      // single history entry — the close button then unwinds it in one step.
-      if (e.key === 'ArrowLeft' && prev) {
-        e.preventDefault();
-        router.replace(frameHref(prev.id));
-      } else if (e.key === 'ArrowRight' && next) {
-        e.preventDefault();
-        router.replace(frameHref(next.id));
-      }
+      if (e.key === 'ArrowLeft' && prev) { e.preventDefault(); router.replace(frameHref(prev.id)); }
+      else if (e.key === 'ArrowRight' && next) { e.preventDefault(); router.replace(frameHref(next.id)); }
     };
     document.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
@@ -107,157 +84,179 @@ export function FrameModal({
     };
   }, [close, router, frameHref, prev, next]);
 
-  const arrowClass =
-    'absolute top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-neutral-200 bg-white/90 text-neutral-700 shadow-md backdrop-blur transition-colors hover:bg-white hover:text-neutral-950 dark:border-neutral-700 dark:bg-neutral-900/90 dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white';
+  const commentCount = comments.filter((c) => !c.parent_id).length;
 
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: Esc handled via keydown listener above.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: Esc handled above.
     <div
       role="dialog"
       aria-modal="true"
       aria-label={frameName}
       onClick={close}
-      className="fixed inset-0 z-[120] flex bg-black/70 p-3 backdrop-blur-sm md:p-6"
+      className="fixed inset-0 z-[120] flex flex-col bg-[oklch(0.12_0.006_260/0.92)] backdrop-blur-sm"
     >
+      {/* Header bar */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative m-auto flex h-full w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
+        className="flex shrink-0 items-center gap-4 px-6 py-3"
       >
-        {/* Header */}
-        <div className="flex shrink-0 items-center gap-3 border-b border-neutral-200 px-5 py-3 dark:border-neutral-800">
+        {/* Left: flow name in [icon] app */}
+        <div className="flex items-center gap-2 text-sm text-white/90">
+          <span className="font-medium">{flow.name}</span>
+          <span className="text-white/40">in</span>
           {appIconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={appIconUrl} alt="" className="h-6 w-6 shrink-0 rounded-md" />
+            <img src={appIconUrl} alt="" className="h-5 w-5 rounded" />
           ) : (
             <span
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[13px] font-semibold text-white"
+              className="flex h-5 w-5 items-center justify-center rounded text-[13px] font-semibold text-white"
               style={{ background: accentColor ?? 'oklch(0.5 0.22 254)' }}
             >
               {appName.charAt(0).toUpperCase()}
             </span>
           )}
-          <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-            {appName}
-          </span>
-          <span className="text-neutral-300 dark:text-neutral-600">/</span>
-          <span className="truncate text-sm text-neutral-600 dark:text-neutral-400">
-            {flow.name}
-          </span>
-          <span className="text-neutral-300 dark:text-neutral-600">/</span>
-          <span className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
-            {frameName}
-          </span>
-          <span className="ml-auto shrink-0 font-mono text-[13px] tabular-nums text-neutral-400 dark:text-neutral-500">
-            {String(idx + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
-          </span>
+          <span className="font-semibold">{appName}</span>
+        </div>
+
+        {/* Right: icons + close */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowComments((v) => !v)}
+            className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+              showComments
+                ? 'bg-white/20 text-white'
+                : 'text-white/60 hover:bg-white/10 hover:text-white'
+            }`}
+            title={showComments ? 'Hide comments' : 'Show comments'}
+          >
+            <MessageCircle size={18} />
+            {commentCount > 0 ? (
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[13px] font-semibold text-white">
+                {commentCount}
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            title="Copy link"
+          >
+            <Link2 size={18} />
+          </button>
           <button
             type="button"
             onClick={close}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white"
             aria-label="Close"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
           >
-            <X className="h-5 w-5" />
+            <X size={18} />
           </button>
         </div>
+      </div>
 
-        {/* Body: image (scrollable) + comments panel */}
-        <div className="flex min-h-0 flex-1">
-          <div className="relative flex min-w-0 flex-1 justify-center overflow-y-auto overflow-x-hidden bg-neutral-100 px-4 py-6 dark:bg-neutral-950">
-            {prev ? (
-              <Link
-                href={frameHref(prev.id)}
-                scroll={false}
-                replace
-                aria-label={`Previous: ${prev.name}`}
-                title={prev.name}
-                className={`${arrowClass} left-4`}
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Link>
-            ) : null}
+      {/* Main content area */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex min-h-0 flex-1"
+      >
+        {/* Image area */}
+        <div className="relative flex min-w-0 flex-1 items-center justify-center px-16 py-8">
+          {/* Prev arrow */}
+          {prev ? (
+            <Link
+              href={frameHref(prev.id)}
+              scroll={false}
+              replace
+              aria-label={`Previous: ${prev.name}`}
+              className="absolute left-4 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[oklch(0.28_0.008_260)] text-white shadow-xl transition-transform hover:scale-105"
+            >
+              <ArrowLeft size={20} strokeWidth={2.5} />
+            </Link>
+          ) : null}
 
-            {videoSrc ? (
-              // Motion proof: loop the recorded clip in place of the still.
-              // Muted + autoplay so it starts without a click; controls stay
-              // available for scrubbing. The screenshot doubles as poster.
-              <video
-                src={videoSrc}
-                poster={src}
-                autoPlay
-                muted
-                loop
-                playsInline
-                controls
-                className={
-                  isMobile
-                    ? 'h-auto self-center rounded-[1.4rem] bg-black shadow-lg'
-                    : 'h-auto self-start rounded-lg bg-black shadow-lg'
-                }
-                style={
-                  isMobile
-                    ? { maxHeight: 'min(82vh, calc(100vh - 240px))', maxWidth: '100%' }
-                    : { width: 'min(1040px, 100%)', maxWidth: '100%' }
-                }
-              />
-            ) : isMobile ? (
-              // Mobile: show the screen inside a phone bezel (matching the flow
-              // cards), sized to fit the viewport height. The bezel screen
-              // scrolls for taller-than-device full-page captures.
-              <DeviceBezel
-                src={src}
-                alt={frameName}
-                scrollable
-                className="self-center"
-                style={{
-                  height: 'min(82vh, calc(100vh - 240px))',
-                  filter: 'drop-shadow(0 24px 44px rgba(15,15,20,0.30))',
-                }}
-              />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={src}
-                alt={frameName}
-                className="h-auto self-start rounded-lg bg-white shadow-lg dark:bg-neutral-900"
-                style={{ width: 'min(1040px, 100%)', maxWidth: '100%' }}
-              />
-            )}
+          {/* Screen */}
+          {videoSrc ? (
+            <video
+              src={videoSrc}
+              poster={src}
+              autoPlay
+              muted
+              loop
+              playsInline
+              controls
+              className="h-auto max-h-full rounded-xl bg-black shadow-2xl"
+              style={{
+                width: isMobile ? 'auto' : 'min(900px, 70%)',
+                maxWidth: isMobile ? 'min(360px, 50%)' : '100%',
+              }}
+            />
+          ) : isMobile ? (
+            <DeviceBezel
+              src={src}
+              alt={frameName}
+              scrollable
+              style={{
+                height: 'min(80vh, calc(100vh - 200px))',
+                filter: 'drop-shadow(0 24px 60px rgba(0,0,0,0.5))',
+              }}
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={src}
+              alt={frameName}
+              className="h-auto max-h-full rounded-xl bg-white shadow-2xl"
+              style={{ width: 'min(900px, 70%)', maxWidth: '100%' }}
+            />
+          )}
 
-            {next ? (
-              <Link
-                href={frameHref(next.id)}
-                scroll={false}
-                replace
-                aria-label={`Next: ${next.name}`}
-                title={next.name}
-                className={`${arrowClass} right-4`}
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Link>
-            ) : null}
-          </div>
-
-          <CommentsPanel
-            frameRowId={frameRowId}
-            comments={comments}
-            isAgency={isAgency}
-            appSlug={appSlug}
-            appId={appId}
-            currentUserId={currentUserId}
-            mentionables={mentionables}
-            readOnly={readOnly}
-          />
+          {/* Next arrow */}
+          {next ? (
+            <Link
+              href={frameHref(next.id)}
+              scroll={false}
+              replace
+              aria-label={`Next: ${next.name}`}
+              className="absolute right-4 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[oklch(0.28_0.008_260)] text-white shadow-xl transition-transform hover:scale-105"
+            >
+              <ArrowRight size={20} strokeWidth={2.5} />
+            </Link>
+          ) : null}
         </div>
 
-        {/* Bottom: other screens in this flow */}
-        <Filmstrip
-          flow={flow}
-          platform={platform}
-          appSlug={appSlug}
-          activeFrameId={activeFrameId}
-          versionQuery={versionQuery}
-          replace
-        />
+        {/* Comments panel - slides in from right */}
+        {showComments ? (
+          <div className="w-[320px] shrink-0 overflow-y-auto bg-[oklch(0.16_0.007_260)]">
+            <CommentsPanel
+              frameRowId={frameRowId}
+              comments={comments}
+              isAgency={isAgency}
+              appSlug={appSlug}
+              appId={appId}
+              currentUserId={currentUserId}
+              mentionables={mentionables}
+              readOnly={readOnly}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      {/* Bottom bar */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex shrink-0 items-center justify-between px-6 py-3"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] text-white/50">
+            {String(idx + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+          </span>
+        </div>
+        <div className="text-right">
+          <span className="text-[13px] text-white/50">
+            {isMobile ? 'Mobile' : 'Web'} - {frameName}
+          </span>
+        </div>
       </div>
     </div>
   );

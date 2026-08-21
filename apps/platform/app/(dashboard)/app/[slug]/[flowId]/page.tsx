@@ -1,14 +1,10 @@
-import { Camera } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { JourneyStrip } from '@/components/journey-strip';
+import { FlowStrip } from '@/components/flow-strip';
 import {
   getAppBySlug,
   getBuildByVersion,
-  getCurrentProfile,
-  getFreshFrameKeys,
   getManifestForApp,
-  getUnresolvedCommentsByFrame,
 } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -31,51 +27,36 @@ export default async function FlowPage({
       ? await getBuildByVersion(app.id, versionParam)
       : null;
 
-  const profile = await getCurrentProfile();
   const manifest = await getManifestForApp(app.id, selectedBuild?.id);
   if (!manifest) notFound();
   const flow = manifest.flows.find((f) => f.id === flowId);
   if (!flow) notFound();
 
-  const [freshFrameKeys, unresolvedByFrame] = await Promise.all([
-    profile ? getFreshFrameKeys(profile.id, app.id) : Promise.resolve(new Set<string>()),
-    getUnresolvedCommentsByFrame(app.id),
-  ]);
+  const isMobile = manifest.platform !== 'web';
+  const versionQuery = selectedBuild ? `?v=${selectedBuild.version ?? ''}` : '';
 
   return (
-    <main className="flex flex-1 flex-col overflow-y-auto bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
-      <div className="flex items-baseline justify-between border-b border-[oklch(0.9_0.007_260)] px-10 py-7 dark:border-[oklch(0.24_0.008_260)]">
-        <div>
-          <p className="font-mono text-[13px] tracking-[0.12em] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-            Flow
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]">
-            {flow.name}
-          </h1>
-          <p className="mt-1 font-mono text-[13px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-            {flow.id}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-          <Camera size={12} />
-          <span>
-            {flow.frames.length} frame{flow.frames.length === 1 ? '' : 's'}
-          </span>
-        </div>
+    <main className="flex flex-1 flex-col bg-white pl-8 pt-8 text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
+      {/* Flow header */}
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold tracking-tight text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]">
+          {flow.name}
+        </h1>
+        <p className="mt-1 text-[13px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
+          {flow.frames.length} screen{flow.frames.length === 1 ? '' : 's'}
+        </p>
       </div>
 
       {flow.frames.length === 0 ? (
-        <p className="px-10 py-12 text-sm text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
+        <p className="py-13 text-sm text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
           This flow has no frames yet.
         </p>
       ) : (
-        <JourneyStrip
+        <FlowStrip
           flow={flow}
-          platform={manifest.platform}
           appSlug={app.slug}
-          freshFrameKeys={freshFrameKeys}
-          unresolvedByFrame={unresolvedByFrame}
-          versionQuery={selectedBuild ? `?v=${selectedBuild.version ?? ''}` : ''}
+          isMobile={isMobile}
+          versionQuery={versionQuery}
         />
       )}
     </main>
