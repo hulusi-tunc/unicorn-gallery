@@ -169,10 +169,26 @@ async function fetchImage(url: string): Promise<FetchedImage> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) return { kind: 'unsupported', reason: `HTTP ${res.status}` };
-    const buf = new Uint8Array(await res.arrayBuffer());
-    const format = detectImageFormat(buf);
-    if (format === 'png' || format === 'jpg') return { kind: format, bytes: buf };
-    return { kind: 'unsupported', reason: format };
+    const raw = new Uint8Array(await res.arrayBuffer());
+    const format = detectImageFormat(raw);
+    if (format !== 'png' && format !== 'jpg') {
+      return { kind: 'unsupported', reason: format };
+    }
+    // Large PNGs (retina captures >1 MB) are compressed to JPEG to keep
+    // the in-memory footprint manageable — 96 images at 4 MB each would
+    // OOM the 2 GB Vercel function. JPEG at quality 80 reduces ~4 MB PNG
+    // to ~200-400 KB with negligible visual difference in a PDF.
+    if (format === 'png' && raw.length > 1_000_000) {
+      try {
+        const sharp = (await import('sharp')).default;
+        const jpg = await sharp(raw).jpeg({ quality: 80 }).toBuffer();
+        return { kind: 'jpg', bytes: new Uint8Array(jpg) };
+      } catch {
+        // sharp failure — fall back to the original PNG
+        return { kind: 'png', bytes: raw };
+      }
+    }
+    return { kind: format, bytes: raw };
   } catch (err) {
     return { kind: 'unsupported', reason: (err as Error).message };
   }
