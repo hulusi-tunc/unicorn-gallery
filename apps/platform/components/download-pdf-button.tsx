@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useDownloadToast } from '@/components/download-toast';
 import { useTheme } from '@/components/providers/theme-provider';
 import type { BuildSummary } from '@/lib/queries';
 import { editorialFonts, getNd } from '@/lib/tokens';
@@ -31,6 +32,7 @@ export function DownloadPdfButton({
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
+  const toast = useDownloadToast();
   const [pendingVersion, setPendingVersion] = useState<number | 'latest' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pending = pendingVersion !== null;
@@ -38,6 +40,8 @@ export function DownloadPdfButton({
   const onDownload = async (version: number | null): Promise<void> => {
     setError(null);
     setPendingVersion(version ?? 'latest');
+    const filename = `${appSlug}-${version != null ? `v${version}` : 'latest'}.pdf`;
+    const toastId = toast.start('pdf', filename);
     try {
       const qs = version != null ? `?v=${version}` : '';
       const res = await fetch(
@@ -52,14 +56,16 @@ export function DownloadPdfButton({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${appSlug}-${version != null ? `v${version}` : 'latest'}.pdf`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
-      // Defer revoke so Safari has time to start the download.
       setTimeout(() => URL.revokeObjectURL(url), 4000);
+      toast.finish(toastId);
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      setError(msg);
+      toast.fail(toastId, msg);
     } finally {
       setPendingVersion(null);
     }

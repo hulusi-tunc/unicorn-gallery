@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Space_Grotesk, Space_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
+import { DownloadToastProvider } from '@/components/download-toast';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import './globals.css';
 
@@ -36,7 +37,9 @@ export default function RootLayout({ children }: { children: ReactNode }): React
         className={`${spaceGrotesk.variable} ${spaceMono.variable} antialiased`}
         style={{ fontFamily: 'var(--font-space-grotesk), system-ui, sans-serif' }}
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <DownloadToastProvider>{children}</DownloadToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
