@@ -1,7 +1,7 @@
 /**
  * Design token system — ported from the Unicorn Studio "Hubera" design system.
  * Aesthetic: Linear / Vercel / Mobbin. Cool neutrals, subtle borders,
- * single electric-blue accent (#1072F5), Space Grotesk everywhere.
+ * single electric-blue accent (#1072F5), Inter + JetBrains Mono.
  */
 
 export const swatchTokens = {
@@ -79,9 +79,9 @@ export function getNd(theme: string): SwatchTheme {
 }
 
 export const editorialFonts = {
-  display: 'var(--font-space-grotesk), system-ui, sans-serif',
-  body: 'var(--font-space-grotesk), system-ui, sans-serif',
-  mono: "var(--font-space-mono), ui-monospace, 'SFMono-Regular', Menlo, monospace",
+  display: 'var(--font-inter), system-ui, sans-serif',
+  body: 'var(--font-inter), system-ui, sans-serif',
+  mono: "var(--font-jetbrains-mono), ui-monospace, 'SFMono-Regular', Menlo, monospace",
 } as const;
 
 export const swatchRadii = {
@@ -120,7 +120,6 @@ export interface TypeStyle {
   lineHeight: number;
   fontWeight: number;
   letterSpacing: string;
-  textTransform?: 'none' | 'uppercase';
 }
 
 export const type = {
@@ -132,11 +131,11 @@ export const type = {
   bodyLg: { fontFamily: editorialFonts.body, fontSize: 16, lineHeight: 1.55, fontWeight: 400, letterSpacing: '0' } satisfies TypeStyle,
   bodyMd: { fontFamily: editorialFonts.body, fontSize: 14, lineHeight: 1.55, fontWeight: 400, letterSpacing: '0' } satisfies TypeStyle,
   bodySm: { fontFamily: editorialFonts.body, fontSize: 13, lineHeight: 1.5, fontWeight: 400, letterSpacing: '0' } satisfies TypeStyle,
-  bodyXs: { fontFamily: editorialFonts.body, fontSize: 12, lineHeight: 1.5, fontWeight: 400, letterSpacing: '0' } satisfies TypeStyle,
+  bodyXs: { fontFamily: editorialFonts.body, fontSize: 13, lineHeight: 1.5, fontWeight: 400, letterSpacing: '0' } satisfies TypeStyle,
   monoMd: { fontFamily: editorialFonts.mono, fontSize: 13, lineHeight: 1.55, fontWeight: 400, letterSpacing: '0' } satisfies TypeStyle,
-  monoSm: { fontFamily: editorialFonts.mono, fontSize: 12, lineHeight: 1.5, fontWeight: 400, letterSpacing: '0' } satisfies TypeStyle,
-  label: { fontFamily: editorialFonts.mono, fontSize: 11, lineHeight: 1.2, fontWeight: 400, letterSpacing: '0.12em', textTransform: 'uppercase' } satisfies TypeStyle,
-  labelSm: { fontFamily: editorialFonts.mono, fontSize: 10, lineHeight: 1.2, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase' } satisfies TypeStyle,
+  monoSm: { fontFamily: editorialFonts.mono, fontSize: 13, lineHeight: 1.5, fontWeight: 400, letterSpacing: '0' } satisfies TypeStyle,
+  label: { fontFamily: editorialFonts.mono, fontSize: 13, lineHeight: 1.3, fontWeight: 500, letterSpacing: '0.02em' } satisfies TypeStyle,
+  labelSm: { fontFamily: editorialFonts.mono, fontSize: 13, lineHeight: 1.3, fontWeight: 500, letterSpacing: '0.02em' } satisfies TypeStyle,
 } as const;
 export type TypeKey = keyof typeof type;
 

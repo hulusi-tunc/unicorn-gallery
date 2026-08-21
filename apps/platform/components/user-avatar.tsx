@@ -51,7 +51,7 @@ export function UserAvatar({
     border,
     background,
     color,
-    fontFamily: 'var(--font-space-grotesk), system-ui, sans-serif',
+    fontFamily: 'var(--font-inter), system-ui, sans-serif',
     fontSize: fontSize ?? Math.max(9, Math.round(size * 0.4)),
     fontWeight: 600,
     letterSpacing: '-0.01em',

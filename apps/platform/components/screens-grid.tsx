@@ -87,7 +87,7 @@ export function ScreensGrid({
               <p className="truncate text-sm font-medium text-neutral-900 group-hover:text-neutral-950 dark:text-neutral-200 dark:group-hover:text-neutral-50">
                 {frame.name}
               </p>
-              <p className="truncate font-mono text-[10px] text-neutral-500">{flow.name}</p>
+              <p className="truncate font-mono text-[13px] text-neutral-500">{flow.name}</p>
             </div>
           </Link>
         );

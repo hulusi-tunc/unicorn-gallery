@@ -92,12 +92,12 @@ function JourneyCard({
       className="group flex flex-col gap-3 transition-transform hover:-translate-y-1"
     >
       <div className="relative">
-        <span className="absolute -top-2 -left-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white font-mono text-[10px] tabular-nums text-neutral-500 ring-1 ring-neutral-300 group-hover:ring-neutral-500 dark:bg-neutral-900 dark:text-neutral-400 dark:ring-neutral-700 dark:group-hover:ring-neutral-500">
+        <span className="absolute -top-2 -left-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white font-mono text-[13px] tabular-nums text-neutral-500 ring-1 ring-neutral-300 group-hover:ring-neutral-500 dark:bg-neutral-900 dark:text-neutral-400 dark:ring-neutral-700 dark:group-hover:ring-neutral-500">
           {String(step).padStart(2, '0')}
         </span>
         {isFresh ? (
           <span
-            className="absolute -top-2 right-1 z-10 inline-flex items-center rounded-full bg-[oklch(0.5_0.22_254)] px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-white shadow-md dark:bg-[oklch(0.6_0.21_254)]"
+            className="absolute -top-2 right-1 z-10 inline-flex items-center rounded-full bg-[oklch(0.5_0.22_254)] px-2 py-0.5 font-mono text-[13px] font-semibold tracking-[0.06em] text-white shadow-md dark:bg-[oklch(0.6_0.21_254)]"
             title="Updated since your last visit"
           >
             Updated
@@ -145,7 +145,7 @@ function JourneyCard({
         <p className="truncate text-sm font-medium text-neutral-900 group-hover:text-neutral-950 dark:text-neutral-200 dark:group-hover:text-neutral-50">
           {frame.name}
         </p>
-        <p className="truncate font-mono text-[10px] text-neutral-500">{frame.id}</p>
+        <p className="truncate font-mono text-[13px] text-neutral-500">{frame.id}</p>
       </div>
     </Link>
   );

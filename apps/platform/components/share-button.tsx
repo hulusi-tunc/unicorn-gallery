@@ -151,7 +151,7 @@ function ShareDialog({
                 fontFamily: editorialFonts.mono,
                 fontSize: 11,
                 letterSpacing: '0.12em',
-                textTransform: 'uppercase',
+                
                 color: t.textSecondary,
                 margin: 0,
               }}
@@ -589,7 +589,7 @@ function AddCustomerArea({
           fontFamily: editorialFonts.mono,
           fontSize: 10,
           letterSpacing: '0.08em',
-          textTransform: 'uppercase',
+          
           color: t.textSecondary,
           cursor: 'pointer',
         }}
@@ -1044,7 +1044,7 @@ function SectionLabel({
         fontFamily: editorialFonts.mono,
         fontSize: 11,
         letterSpacing: '0.08em',
-        textTransform: 'uppercase',
+        
         color: t.textSecondary,
         margin: 0,
         display: 'inline-flex',

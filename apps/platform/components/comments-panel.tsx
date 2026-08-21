@@ -586,7 +586,7 @@ function CommentItem({
               fontFamily: editorialFonts.mono,
               fontSize: 10,
               letterSpacing: '0.06em',
-              textTransform: 'uppercase',
+              
               color: t.textDisabled,
             }}
           >
@@ -600,9 +600,9 @@ function CommentItem({
                 alignItems: 'center',
                 gap: 3,
                 fontFamily: editorialFonts.mono,
-                fontSize: 9,
+                fontSize: 13,
                 letterSpacing: '0.06em',
-                textTransform: 'uppercase',
+                
                 color: t.success,
                 background: 'transparent',
                 padding: '1px 6px',
@@ -983,7 +983,7 @@ function ReplyForm({
           fontFamily: editorialFonts.mono,
           fontSize: 10,
           color: t.textSecondary,
-          textTransform: 'uppercase',
+          
           letterSpacing: '0.06em',
         }}
       >
@@ -1270,9 +1270,9 @@ function MentionTextarea({
                 <span
                   style={{
                     fontFamily: editorialFonts.mono,
-                    fontSize: 9,
+                    fontSize: 13,
                     color: t.textDisabled,
-                    textTransform: 'uppercase',
+                    
                     letterSpacing: '0.06em',
                   }}
                 >

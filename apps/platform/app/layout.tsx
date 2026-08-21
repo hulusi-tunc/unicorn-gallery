@@ -1,20 +1,19 @@
 import type { Metadata } from 'next';
-import { Space_Grotesk, Space_Mono } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { DownloadToastProvider } from '@/components/download-toast';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import './globals.css';
 
-const spaceGrotesk = Space_Grotesk({
-  variable: '--font-space-grotesk',
+const inter = Inter({
+  variable: '--font-inter',
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
 });
 
-const spaceMono = Space_Mono({
-  variable: '--font-space-mono',
+const jetbrainsMono = JetBrains_Mono({
+  variable: '--font-jetbrains-mono',
   subsets: ['latin'],
-  weight: ['400', '700'],
+  weight: ['400', '500', '700'],
 });
 
 export const metadata: Metadata = {
@@ -34,8 +33,8 @@ export default function RootLayout({ children }: { children: ReactNode }): React
         />
       </head>
       <body
-        className={`${spaceGrotesk.variable} ${spaceMono.variable} antialiased`}
-        style={{ fontFamily: 'var(--font-space-grotesk), system-ui, sans-serif' }}
+        className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
+        style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif' }}
       >
         <ThemeProvider>
           <DownloadToastProvider>{children}</DownloadToastProvider>

@@ -164,7 +164,7 @@ function FlowSection({
           >
             {node.flow.name}
           </h2>
-          <p className="mt-0.5 font-mono text-[10px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
+          <p className="mt-0.5 font-mono text-[13px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
             {node.flow.id}
           </p>
         </div>

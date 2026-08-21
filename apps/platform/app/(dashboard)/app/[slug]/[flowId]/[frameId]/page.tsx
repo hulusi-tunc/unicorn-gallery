@@ -108,7 +108,7 @@ export default async function FramePage({
           </Link>
           <span className={TEXT_DISABLED}>/</span>
           <span className={`text-sm font-medium ${TEXT_DISPLAY}`}>{frame.name}</span>
-          <span className={`ml-auto font-mono text-[11px] tabular-nums ${TEXT_SECONDARY}`}>
+          <span className={`ml-auto font-mono text-[13px] tabular-nums ${TEXT_SECONDARY}`}>
             {String(idx + 1).padStart(2, '0')} / {String(flow.frames.length).padStart(2, '0')}
           </span>
         </div>
@@ -124,15 +124,15 @@ export default async function FramePage({
           nextName={next?.name}
         />
 
-        <div className={`flex items-center gap-3 border-t ${BORDER_LIGHT} ${BORDER_DARK} px-10 py-3 text-[11px] ${TEXT_SECONDARY}`}>
-          <kbd className={`rounded border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} px-1.5 py-0.5 font-mono text-[10px] ${TEXT_PRIMARY}`}>
+        <div className={`flex items-center gap-3 border-t ${BORDER_LIGHT} ${BORDER_DARK} px-10 py-3 text-[13px] ${TEXT_SECONDARY}`}>
+          <kbd className={`rounded border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} px-1.5 py-0.5 font-mono text-[13px] ${TEXT_PRIMARY}`}>
             ←
           </kbd>
-          <kbd className={`rounded border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} px-1.5 py-0.5 font-mono text-[10px] ${TEXT_PRIMARY}`}>
+          <kbd className={`rounded border ${BORDER_LIGHT} ${BORDER_DARK} ${SURFACE} px-1.5 py-0.5 font-mono text-[13px] ${TEXT_PRIMARY}`}>
             →
           </kbd>
           <span>navigate</span>
-          <span className={`ml-auto font-mono text-[11px] ${TEXT_SECONDARY}`}>{frame.id}</span>
+          <span className={`ml-auto font-mono text-[13px] ${TEXT_SECONDARY}`}>{frame.id}</span>
         </div>
 
         <Filmstrip

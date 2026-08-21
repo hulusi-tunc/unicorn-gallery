@@ -107,27 +107,24 @@ export function AppCard({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 14,
+        gap: 12,
         textDecoration: 'none',
         color: 'inherit',
       }}
     >
       <div
         style={{
-          aspectRatio: '4 / 3',
-          borderRadius: 20,
+          aspectRatio: isMobile ? '4 / 4.5' : '4 / 3',
+          borderRadius: 16,
           overflow: 'hidden',
           background: t.surface,
-          border: `1px solid ${t.border}`,
           position: 'relative',
-          transition: 'transform 220ms cubic-bezier(0.165, 0.84, 0.44, 1), box-shadow 220ms cubic-bezier(0.165, 0.84, 0.44, 1), border-color 220ms ease-out',
-          transform: hover ? 'translateY(-2px)' : 'translateY(0)',
+          transition: 'box-shadow 220ms cubic-bezier(0.165, 0.84, 0.44, 1)',
           boxShadow: hover
             ? theme === 'dark'
-              ? '0 20px 50px -20px rgba(0,0,0,0.5)'
-              : '0 20px 40px -16px rgba(15,15,20,0.12)'
+              ? '0 0 0 1px rgba(255,255,255,0.08), 0 16px 40px -16px rgba(0,0,0,0.5)'
+              : '0 0 0 1px rgba(0,0,0,0.04), 0 16px 40px -16px rgba(15,15,20,0.10)'
             : 'none',
-          borderColor: hover ? t.borderVisible : t.border,
         }}
       >
         <PreviewArea
@@ -138,30 +135,7 @@ export function AppCard({
           theme={theme}
         />
 
-        {/* Platform badge — moved to the bottom-left so the top-right is free
-            for the pin + carousel dots, the way Mobbin clusters them. */}
-        <span
-          style={{
-            position: 'absolute',
-            bottom: 12,
-            left: 12,
-            fontFamily: editorialFonts.mono,
-            fontSize: 10,
-            fontWeight: 500,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: t.textPrimary,
-            background:
-              theme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)',
-            backdropFilter: 'blur(10px) saturate(1.6)',
-            WebkitBackdropFilter: 'blur(10px) saturate(1.6)',
-            border: `1px solid ${t.border}`,
-            borderRadius: 999,
-            padding: '4px 8px',
-          }}
-        >
-          {PLATFORM_LABEL[app.platform]}
-        </span>
+        {/* Platform badge removed — cleaner Mobbin-style card */}
 
         {/* Pin / favorite — top-right, always visible so you can pin without
             hovering. Filled + accent when pinned. */}
@@ -175,24 +149,24 @@ export function AppCard({
           title={isPinned ? 'Unpin from top' : 'Pin to top'}
           style={{
             position: 'absolute',
-            top: 12,
-            right: 12,
+            top: 10,
+            right: 10,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 30,
-            height: 30,
+            width: 28,
+            height: 28,
             cursor: 'pointer',
-            color: isPinned ? accent : t.textPrimary,
+            color: isPinned ? accent : t.textSecondary,
             background:
-              theme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)',
-            backdropFilter: 'blur(10px) saturate(1.6)',
-            WebkitBackdropFilter: 'blur(10px) saturate(1.6)',
-            border: `1px solid ${isPinned ? accent : t.border}`,
+              theme === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.8)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            border: 'none',
             borderRadius: 999,
             padding: 0,
             opacity: hover || isPinned ? 1 : 0,
-            transition: 'opacity 180ms ease-out, color 160ms ease-out, border-color 160ms ease-out',
+            transition: 'opacity 180ms ease-out, color 160ms ease-out',
           }}
         >
           <Pin
@@ -264,53 +238,63 @@ export function AppCard({
         ) : null}
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: '0 4px',
-        }}
-      >
-        {/* Left: title + tagline */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-            <span
-              style={{
-                fontFamily: editorialFonts.display,
-                fontSize: 16,
-                fontWeight: 600,
-                letterSpacing: '-0.01em',
-                color: t.textDisplay,
-                transition: 'color 200ms cubic-bezier(0.165, 0.84, 0.44, 1)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {app.name}
-            </span>
+      {/* App info row - Mobbin style: icon + name + tagline */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 2px' }}>
+        {app.icon_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={app.icon_url}
+            alt=""
+            style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0 }}
+          />
+        ) : (
+          <span
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: accent,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'white',
+              flexShrink: 0,
+            }}
+          >
+            {app.name.charAt(0).toUpperCase()}
+          </span>
+        )}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 500,
+              color: t.textDisplay,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              lineHeight: 1.3,
+            }}
+          >
+            {app.name}
           </div>
           {app.tagline ? (
-            <p
+            <div
               style={{
-                margin: 0,
-                fontFamily: editorialFonts.body,
                 fontSize: 13,
-                lineHeight: 1.5,
                 color: t.textSecondary,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
+                lineHeight: 1.3,
               }}
             >
               {app.tagline}
-            </p>
+            </div>
           ) : null}
         </div>
-
-        {/* Right: staff avatars */}
         <StaffRow designer={app.designer} pm={app.pm} t={t} />
       </div>
     </Link>
@@ -354,10 +338,10 @@ function CarouselArrow({
           theme === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.9)',
         backdropFilter: 'blur(10px) saturate(1.6)',
         WebkitBackdropFilter: 'blur(10px) saturate(1.6)',
-        border: `1px solid ${t.border}`,
+        border: 'none',
         borderRadius: 999,
         padding: 0,
-        boxShadow: '0 4px 14px -6px rgba(0,0,0,0.35)',
+        boxShadow: '0 2px 8px -3px rgba(0,0,0,0.25)',
         opacity: show ? 1 : 0,
         pointerEvents: show ? 'auto' : 'none',
         transition: 'opacity 180ms ease-out, transform 180ms cubic-bezier(0.165, 0.84, 0.44, 1)',
@@ -497,18 +481,10 @@ function PreviewArea({
   isMobile: boolean;
   theme: string;
 }): ReactNode {
-  // Canvas-style dot grid stage. Drawn with an SVG tile (no CSS gradients).
-  const dotFill =
-    theme === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(80,80,100,0.22)';
-  const dotSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><circle cx='1' cy='1' r='1' fill='${dotFill}'/></svg>`;
-  const dotUrl = `url("data:image/svg+xml,${encodeURIComponent(dotSvg)}")`;
   const stageBg: CSSProperties = {
     position: 'absolute',
     inset: 0,
     background: t.surface,
-    backgroundImage: dotUrl,
-    backgroundSize: '16px 16px',
-    backgroundPosition: '0 0',
   };
 
   if (!imageUrl) {
@@ -525,10 +501,10 @@ function PreviewArea({
           style={{
             position: 'absolute',
             left: '50%',
-            top: '52%',
+            top: '50%',
             transform: 'translate(-50%, -50%)',
-            // Bezel fills 88% of card height; width derives from the frame aspect.
-            height: '88%',
+            height: '80%',
+            maxHeight: '90%',
             filter:
               theme === 'dark'
                 ? 'drop-shadow(0 22px 36px rgba(0,0,0,0.55))'

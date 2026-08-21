@@ -66,14 +66,14 @@ export function FrameVersionScrubber({
 
   return (
     <div className="flex flex-col gap-2 border-t border-[oklch(0.9_0.007_260)] bg-[oklch(0.97_0.004_260)] px-10 py-3 dark:border-[oklch(0.24_0.008_260)] dark:bg-[oklch(0.13_0.006_260)]">
-      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
+      <div className="flex items-center gap-2 font-mono text-[13px] tracking-[0.08em] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
         <History size={12} />
         <span>Version history — {total} captures</span>
         <span className="ml-auto text-[oklch(0.55_0.01_260)] dark:text-[oklch(0.6_0.01_260)]">
-          <kbd className="rounded border border-[oklch(0.85_0.009_260)] bg-white px-1 py-0.5 text-[9px] dark:border-[oklch(0.30_0.008_260)] dark:bg-[oklch(0.22_0.008_260)]">
+          <kbd className="rounded border border-[oklch(0.85_0.009_260)] bg-white px-1 py-0.5 text-[13px] dark:border-[oklch(0.30_0.008_260)] dark:bg-[oklch(0.22_0.008_260)]">
             ↑
           </kbd>{' '}
-          <kbd className="rounded border border-[oklch(0.85_0.009_260)] bg-white px-1 py-0.5 text-[9px] dark:border-[oklch(0.30_0.008_260)] dark:bg-[oklch(0.22_0.008_260)]">
+          <kbd className="rounded border border-[oklch(0.85_0.009_260)] bg-white px-1 py-0.5 text-[13px] dark:border-[oklch(0.30_0.008_260)] dark:bg-[oklch(0.22_0.008_260)]">
             ↓
           </kbd>
         </span>
@@ -102,7 +102,7 @@ export function FrameVersionScrubber({
                 loading="lazy"
               />
               <span
-                className={`font-mono text-[9px] font-semibold uppercase tracking-[0.06em] ${
+                className={`font-mono text-[13px] font-semibold tracking-[0.06em] ${
                   isActive
                     ? 'text-[oklch(0.5_0.22_254)] dark:text-[oklch(0.6_0.21_254)]'
                     : 'text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]'
@@ -110,7 +110,7 @@ export function FrameVersionScrubber({
               >
                 {label}
               </span>
-              <span className="text-[9px] text-[oklch(0.55_0.01_260)] dark:text-[oklch(0.6_0.01_260)]">
+              <span className="text-[13px] text-[oklch(0.55_0.01_260)] dark:text-[oklch(0.6_0.01_260)]">
                 {new Date(c.captured_at).toLocaleDateString(undefined, {
                   month: 'short',
                   day: 'numeric',

@@ -130,7 +130,7 @@ export function FrameModal({
             <img src={appIconUrl} alt="" className="h-6 w-6 shrink-0 rounded-md" />
           ) : (
             <span
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold text-white"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[13px] font-semibold text-white"
               style={{ background: accentColor ?? 'oklch(0.5 0.22 254)' }}
             >
               {appName.charAt(0).toUpperCase()}
@@ -147,7 +147,7 @@ export function FrameModal({
           <span className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
             {frameName}
           </span>
-          <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums text-neutral-400 dark:text-neutral-500">
+          <span className="ml-auto shrink-0 font-mono text-[13px] tabular-nums text-neutral-400 dark:text-neutral-500">
             {String(idx + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
           </span>
           <button

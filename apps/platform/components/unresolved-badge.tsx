@@ -89,7 +89,7 @@ export function UnresolvedBadge({
   return (
     <span
       ref={anchorRef}
-      className={`absolute z-20 inline-flex items-center gap-1 rounded-full bg-[oklch(0.7_0.18_55)] px-2 py-0.5 font-mono text-[9px] font-semibold tabular-nums text-white shadow-md dark:bg-[oklch(0.65_0.19_55)] ${
+      className={`absolute z-20 inline-flex items-center gap-1 rounded-full bg-[oklch(0.7_0.18_55)] px-2 py-0.5 font-mono text-[13px] font-semibold tabular-nums text-white shadow-md dark:bg-[oklch(0.65_0.19_55)] ${
         offsetForUpdated ? 'right-1 top-5' : '-top-2 right-1'
       }`}
       onMouseEnter={() => setOpen(true)}

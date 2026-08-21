@@ -87,7 +87,7 @@ export function AppHeader({
     fontFamily: editorialFonts.mono,
     fontSize: 11,
     letterSpacing: '0.06em',
-    textTransform: 'uppercase',
+    
     color: t.textSecondary,
     textDecoration: 'none',
     transition: 'color 200ms ease-out',
@@ -255,7 +255,7 @@ function MetaLabel({
         fontFamily: editorialFonts.mono,
         fontSize: 10,
         letterSpacing: '0.1em',
-        textTransform: 'uppercase',
+        
         color: t.textDisabled,
       }}
     >
@@ -382,7 +382,7 @@ function StaffField({
                     fontFamily: editorialFonts.mono,
                     fontSize: 9,
                     letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
+                    
                     color: t.textDisabled,
                   }}
                 >

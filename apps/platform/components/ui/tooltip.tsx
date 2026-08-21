@@ -6,7 +6,7 @@ import { cn } from '@/lib/cn';
 
 /**
  * Editorial Tooltip — Radix primitive styled to match the Unicorn Studio
- * gallery system. Rounded surface, hairline border, Space Grotesk body,
+ * gallery system. Rounded surface, hairline border, Inter body,
  * theme-aware via Tailwind `dark:` variants. No gradients.
  */
 

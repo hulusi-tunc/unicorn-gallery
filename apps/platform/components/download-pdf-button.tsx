@@ -91,7 +91,7 @@ export function DownloadPdfButton({
             background: t.surface,
             color: error ? 'oklch(0.55 0.20 25)' : t.textSecondary,
             fontFamily: editorialFonts.mono,
-            fontSize: 10,
+            fontSize: 13,
             letterSpacing: '0.04em',
             cursor: pending ? 'wait' : 'pointer',
             opacity: pending ? 0.7 : 1,
@@ -112,9 +112,9 @@ export function DownloadPdfButton({
         <DropdownMenuLabel
           style={{
             fontFamily: editorialFonts.mono,
-            fontSize: 10,
+            fontSize: 13,
             letterSpacing: '0.08em',
-            textTransform: 'uppercase',
+            
             color: t.textSecondary,
           }}
         >
@@ -146,7 +146,7 @@ export function DownloadPdfButton({
             <span
               style={{
                 fontFamily: editorialFonts.mono,
-                fontSize: 10,
+                fontSize: 13,
                 color: t.textSecondary,
               }}
             >
@@ -161,9 +161,9 @@ export function DownloadPdfButton({
             <DropdownMenuLabel
               style={{
                 fontFamily: editorialFonts.mono,
-                fontSize: 10,
+                fontSize: 13,
                 letterSpacing: '0.08em',
-                textTransform: 'uppercase',
+                
                 color: t.textSecondary,
               }}
             >

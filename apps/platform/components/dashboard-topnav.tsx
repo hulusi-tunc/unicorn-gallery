@@ -2,6 +2,7 @@
 
 import { Bell, ClipboardCheck, Moon, Search, Sun } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import { UnicornLogo } from '@/components/brand/unicorn-logo';
@@ -26,9 +27,13 @@ export function DashboardTopNav({
 }): ReactNode {
   const { theme, toggle } = useTheme();
   const t = getNd(theme);
+  const pathname = usePathname();
   const [searchHovered, setSearchHovered] = useState(false);
   const [logoHovered, setLogoHovered] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  const isAppsActive = pathname === '/apps' || pathname.startsWith('/app/');
+  const isToolsActive = pathname.startsWith('/dor') || pathname === '/design-system';
 
   // Global ⌘K / Ctrl+K opens the palette from anywhere in the dashboard.
   useEffect(() => {
@@ -49,13 +54,19 @@ export function DashboardTopNav({
     right: 0,
     height: TOPNAV_HEIGHT,
     background: t.black,
-    borderBottom: `1px solid ${t.border}`,
     display: 'flex',
     alignItems: 'center',
-    gap: 28,
-    padding: `0 ${space[6]}px`,
+    justifyContent: 'center',
     zIndex: 50,
     fontFamily: editorialFonts.body,
+  };
+
+  const navInnerStyle: CSSProperties = {
+    width: '100%',
+    width: '80%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 20,
   };
 
   const searchStyle: CSSProperties = {
@@ -78,7 +89,8 @@ export function DashboardTopNav({
 
   return (
     <nav style={navStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+      <div style={navInnerStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <Link
           href="/apps"
           aria-label="Unicorn Studio home"
@@ -87,60 +99,53 @@ export function DashboardTopNav({
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 10,
+            marginRight: 10,
             color: logoHovered ? t.accent : t.textDisplay,
             textDecoration: 'none',
             transition: 'color 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
           }}
         >
-          <UnicornLogo variant="mark" height={22} color={t.accent} />
-          <span
-            style={{
-              fontFamily: editorialFonts.display,
-              fontSize: 15,
-              fontWeight: 600,
-              color: 'inherit',
-              letterSpacing: '-0.01em',
-            }}
-          >
-            Unicorn Studio
-          </span>
+          <UnicornLogo variant="mark" height={22} color="currentColor" />
+        </Link>
+        <Link
+          href="/apps"
+          style={{
+            fontSize: 14,
+            fontWeight: isAppsActive ? 500 : 400,
+            color: isAppsActive ? t.textDisplay : t.textSecondary,
+            textDecoration: 'none',
+            fontFamily: editorialFonts.body,
+            padding: '4px 8px',
+            borderRadius: 6,
+            transition: 'color 120ms ease-out',
+          }}
+        >
+          Apps
         </Link>
         {profile.role === 'agency' ? (
           <Link
             href="/dor/team"
-            aria-label="Readiness (Definition of Ready)"
-            className="hidden lg:inline-flex"
             style={{
-              alignItems: 'center',
-              gap: 7,
-              marginLeft: 24,
-              flexShrink: 0,
-              color: t.textSecondary,
+              fontSize: 14,
+              fontWeight: isToolsActive ? 500 : 400,
+              color: isToolsActive ? t.textDisplay : t.textSecondary,
               textDecoration: 'none',
-              fontSize: 13,
-              fontWeight: 500,
               fontFamily: editorialFonts.body,
+              padding: '4px 8px',
+              borderRadius: 6,
               transition: 'color 120ms ease-out',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = t.textPrimary)}
-            onMouseLeave={(e) => (e.currentTarget.style.color = t.textSecondary)}
           >
-            <ClipboardCheck size={14} />
-            Readiness
+            Tools
           </Link>
         ) : null}
       </div>
 
       <div
         style={{
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: 'min(420px, 36vw)',
-          minWidth: 240,
-          pointerEvents: 'auto',
+          flex: 1,
+          maxWidth: 420,
+          margin: '0 auto',
         }}
       >
         <button
@@ -234,6 +239,7 @@ export function DashboardTopNav({
         <UserMenu profile={profile} />
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      </div>
     </nav>
   );
 }
