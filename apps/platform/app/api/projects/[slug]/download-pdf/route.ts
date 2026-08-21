@@ -27,6 +27,7 @@ import {
 } from '@/lib/queries';
 
 export const runtime = 'nodejs';
+export const maxDuration = 120;
 
 /**
  * Download every screen in a project as a single PDF.

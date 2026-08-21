@@ -2,6 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "buildCommand": "cd ../.. && pnpm --filter @unicorn-studio/gallery-capture build && pnpm --filter @unicorn-studio/gallery-platform build",
+  "functions": {
+    "app/api/projects/[slug]/download-pdf/route.ts": {
+      "memory": 3009,
+      "maxDuration": 120
+    },
+    "app/api/projects/[slug]/download-pngs/route.ts": {
+      "memory": 3009,
+      "maxDuration": 120
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/hard-delete-archived",
