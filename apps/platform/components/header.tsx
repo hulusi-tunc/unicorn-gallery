@@ -118,7 +118,7 @@ export function AppHeader({
           iconUrl={app.icon_url}
           accent={accent}
           canEdit={canEdit}
-          size={72}
+          size={56}
         />
 
         <h1

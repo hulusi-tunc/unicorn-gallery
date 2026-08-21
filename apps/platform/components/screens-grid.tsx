@@ -8,15 +8,9 @@ import { WebCardThumb } from '@/components/web-card-thumb';
 import { imageHref } from '@/lib/image-href';
 import type { FrameUnresolvedSummary } from '@/lib/queries';
 
-const MOBILE_CARD_HEIGHT = 360;
-const WEB_CARD_HEIGHT = 200;
-const WEB_CARD_WIDTH = 320;
-
 /**
- * Mobbin-style "Screens" tab — every frame across all flows in one flat,
- * wrapping grid. Reuses the same bezels/thumbs as the flow rows so cards
- * look identical between tabs. Each card keeps its owning flow id so the
- * link still resolves to the frame detail route.
+ * Flat grid of every frame in the app - shown on the Screens tab.
+ * 3-column grid with Mobbin-style card containers.
  */
 export function ScreensGrid({
   flows,
@@ -44,9 +38,13 @@ export function ScreensGrid({
           <Link
             key={frame.id}
             href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(frame.id)}${versionQuery}`}
-            className="group flex flex-col gap-3 transition-transform hover:-translate-y-1"
+            className="group flex flex-col gap-3"
           >
-            <div className="relative">
+            {/* Card container */}
+            <div
+              className="relative overflow-hidden rounded-2xl bg-[oklch(0.96_0.004_260)] transition-shadow hover:shadow-lg dark:bg-[oklch(0.19_0.007_260)]"
+              style={{ aspectRatio: isMobile ? '3 / 4' : '16 / 10' }}
+            >
               {unresolved && unresolved.count > 0 ? (
                 <UnresolvedBadge
                   count={unresolved.count}
@@ -56,38 +54,36 @@ export function ScreensGrid({
               ) : null}
               {frame.video ? (
                 <span
-                  className="absolute bottom-2 right-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur"
+                  className="absolute bottom-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm"
                   title="Has a motion clip"
                 >
-                  <Play className="h-3 w-3" fill="currentColor" />
+                  <Play size={13} fill="currentColor" />
                 </span>
               ) : null}
               {isMobile ? (
-                <DeviceBezel
-                  src={imageHref(frame.image)}
-                  alt={frame.name}
-                  style={{
-                    height: MOBILE_CARD_HEIGHT,
-                    filter:
-                      'drop-shadow(0 18px 32px rgba(15,15,20,0.18)) drop-shadow(0 6px 12px rgba(15,15,20,0.10))',
-                    transition: 'filter 220ms cubic-bezier(0.165, 0.84, 0.44, 1)',
-                  }}
-                  className="group-hover:[filter:drop-shadow(0_28px_44px_rgba(15,15,20,0.28))_drop-shadow(0_8px_14px_rgba(15,15,20,0.14))] dark:[filter:drop-shadow(0_18px_32px_rgba(0,0,0,0.5))_drop-shadow(0_6px_12px_rgba(0,0,0,0.3))] dark:group-hover:[filter:drop-shadow(0_28px_44px_rgba(0,0,0,0.65))_drop-shadow(0_8px_14px_rgba(0,0,0,0.4))]"
-                />
+                <div className="flex h-full items-center justify-center">
+                  <DeviceBezel
+                    src={imageHref(frame.image)}
+                    alt={frame.name}
+                    style={{ height: '80%' }}
+                  />
+                </div>
               ) : (
                 <WebCardThumb
                   src={imageHref(frame.image)}
                   alt={frame.name}
-                  width={WEB_CARD_WIDTH}
-                  height={WEB_CARD_HEIGHT}
+                  hasVideo={!!frame.video}
                 />
               )}
             </div>
-            <div style={isMobile ? { width: MOBILE_CARD_HEIGHT * 0.508 } : { width: WEB_CARD_WIDTH }}>
-              <p className="truncate text-sm font-medium text-neutral-900 group-hover:text-neutral-950 dark:text-neutral-200 dark:group-hover:text-neutral-50">
+            {/* Label below card */}
+            <div className="pl-1">
+              <p className="truncate text-sm font-medium text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]">
                 {frame.name}
               </p>
-              <p className="truncate font-mono text-[13px] text-neutral-500">{flow.name}</p>
+              <p className="truncate text-[13px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
+                {flow.name}
+              </p>
             </div>
           </Link>
         );
