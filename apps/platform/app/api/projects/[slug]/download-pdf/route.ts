@@ -165,7 +165,7 @@ async function fetchImagesBounded(urls: string[], limit: number): Promise<Fetche
 async function fetchImage(url: string): Promise<FetchedImage> {
   if (!url) return { kind: 'missing' };
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) return { kind: 'unsupported', reason: `HTTP ${res.status}` };
     const buf = new Uint8Array(await res.arrayBuffer());
     const format = detectImageFormat(buf);
