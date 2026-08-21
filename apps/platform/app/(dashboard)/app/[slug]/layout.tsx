@@ -50,6 +50,7 @@ export default async function AppLayout({
     builds,
     manifest,
     members,
+    unresolvedByFrame,
   ] = await Promise.all([
     getCurrentProfile(),
     listAgencyProfiles(),
@@ -58,14 +59,9 @@ export default async function AppLayout({
     listBuildsForApp(app.id),
     getManifestForApp(app.id),
     listProjectMembers(app.id),
+    getUnresolvedCommentsByFrame(app.id),
   ]);
-  // Any agency member can change Designer / PM. Customers see chips but no dropdown.
   const canEdit = profile?.role === 'agency';
-  // Sidebar shows unresolved-comment counts (not "unread") so the badge
-  // semantics match the orange frame-card badge — clears only when the
-  // thread is resolved, not just viewed. We aggregate per-frame
-  // unresolved counts up to each flow + its descendant sub-flows.
-  const unresolvedByFrame = await getUnresolvedCommentsByFrame(app.id);
   const unresolvedByFlow = new Map<string, number>();
   if (manifest) {
     const flowChildren = new Map<string, string[]>();

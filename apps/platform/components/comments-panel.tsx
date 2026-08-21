@@ -7,8 +7,8 @@ import {
   Languages,
   Loader2,
   MessageCircle,
+  MoreHorizontal,
   Pencil,
-  Reply,
   RotateCcw,
   Send,
   Trash2,
@@ -51,6 +51,7 @@ export function CommentsPanel({
   currentUserId,
   mentionables,
   readOnly = false,
+  embedded = false,
 }: {
   frameRowId: string;
   comments: CommentWithAuthor[];
@@ -68,16 +69,18 @@ export function CommentsPanel({
    * appears across every version where the frame existed.
    */
   readOnly?: boolean;
+  /** When true, fills parent width - no own width/resize/border. Used inside the frame modal. */
+  embedded?: boolean;
 }): ReactNode {
   const router = useRouter();
   const { theme } = useTheme();
   const t = getNd(theme);
   const [body, setBody] = useState('');
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const [optimisticComments, setOptimisticComments] = useState<CommentWithAuthor[]>([]);
 
   // Resizable width, persisted in localStorage so it survives nav.
   // Mirrors the FlowSidebar pattern — handle on the *left* edge here
@@ -128,7 +131,20 @@ export function CommentsPanel({
     };
   }, [resizing, width]);
 
-  const threads = useMemo(() => buildThreads(comments), [comments]);
+  const allComments = useMemo(() => {
+    const realIds = new Set(comments.map((c) => c.id));
+    const fresh = optimisticComments.filter((o) => !realIds.has(o.id));
+    return [...comments, ...fresh];
+  }, [comments, optimisticComments]);
+
+  useEffect(() => {
+    if (optimisticComments.length > 0) {
+      const realIds = new Set(comments.map((c) => c.id));
+      setOptimisticComments((prev) => prev.filter((o) => !realIds.has(o.id)));
+    }
+  }, [comments]);
+
+  const threads = useMemo(() => buildThreads(allComments), [allComments]);
   const visibleThreads = useMemo(
     () =>
       showResolved
@@ -142,25 +158,45 @@ export function CommentsPanel({
 
   async function onSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
-    if (!body.trim()) return;
-    setPending(true);
+    const text = body.trim();
+    if (!text) return;
     setError(null);
+
+    const tempId = `optimistic-${Date.now()}`;
+    const optimistic: CommentWithAuthor = {
+      id: tempId,
+      frame_id: frameRowId,
+      author_id: currentUserId ?? '',
+      parent_id: null,
+      body: text,
+      created_at: new Date().toISOString(),
+      resolved_at: null,
+      resolved_by: null,
+      author: {
+        id: currentUserId ?? '',
+        name: 'You',
+        email: '',
+        role: 'agency',
+        avatar_url: null,
+      },
+    };
+    setOptimisticComments((prev) => [...prev, optimistic]);
+    setBody('');
+    requestAnimationFrame(() => composerRef.current?.focus());
+
     try {
-      const res = await postComment({
-        frameRowId,
-        appId,
-        appSlug,
-        body: body.trim(),
-      });
-      if (res.error) throw new Error(res.error);
-      setBody('');
-      router.refresh();
-      // Keep focus on the composer so successive comments don't need a click.
-      requestAnimationFrame(() => composerRef.current?.focus());
+      const res = await postComment({ frameRowId, appId, appSlug, body: text });
+      if (res.error) {
+        setOptimisticComments((prev) => prev.filter((c) => c.id !== tempId));
+        setError(res.error);
+        setBody(text);
+      } else {
+        router.refresh();
+      }
     } catch (err) {
+      setOptimisticComments((prev) => prev.filter((c) => c.id !== tempId));
       setError((err as Error).message);
-    } finally {
-      setPending(false);
+      setBody(text);
     }
   }
 
@@ -168,47 +204,45 @@ export function CommentsPanel({
     <aside
       style={{
         display: 'flex',
-        width,
-        flexShrink: 0,
+        ...(embedded ? { width: '100%' } : { width, flexShrink: 0, borderLeft: `1px solid ${t.border}` }),
         flexDirection: 'column',
-        borderLeft: `1px solid ${t.border}`,
-        background: t.black,
+        background: embedded ? 'transparent' : t.black,
         fontFamily: editorialFonts.body,
         position: 'relative',
         userSelect: resizing ? 'none' : undefined,
+        height: '100%',
       }}
     >
-      {/* Resize handle — thin vertical strip on the LEFT edge of the panel.
-          Drag left to grow the panel, right to shrink. Width persists to
-          localStorage on pointerup. Mirrors the FlowSidebar pattern. */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize comments panel"
-        onPointerDown={(e) => {
-          e.preventDefault();
-          startXRef.current = e.clientX;
-          startWidthRef.current = width;
-          setResizing(true);
-        }}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: -3,
-          width: 6,
-          height: '100%',
-          cursor: 'col-resize',
-          background: resizing ? t.accent : 'transparent',
-          transition: resizing ? undefined : 'background 120ms ease-out',
-          zIndex: 1,
-        }}
-        onMouseEnter={(e) => {
-          if (!resizing) e.currentTarget.style.background = t.border;
-        }}
-        onMouseLeave={(e) => {
-          if (!resizing) e.currentTarget.style.background = 'transparent';
-        }}
-      />
+      {!embedded && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize comments panel"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            startXRef.current = e.clientX;
+            startWidthRef.current = width;
+            setResizing(true);
+          }}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: -3,
+            width: 6,
+            height: '100%',
+            cursor: 'col-resize',
+            background: resizing ? t.accent : 'transparent',
+            transition: resizing ? undefined : 'background 120ms ease-out',
+            zIndex: 1,
+          }}
+          onMouseEnter={(e) => {
+            if (!resizing) e.currentTarget.style.background = t.border;
+          }}
+          onMouseLeave={(e) => {
+            if (!resizing) e.currentTarget.style.background = 'transparent';
+          }}
+        />
+      )}
       <div
         style={{
           display: 'flex',
@@ -407,7 +441,7 @@ export function CommentsPanel({
             )}
             <button
               type="submit"
-              disabled={pending || !body.trim()}
+              disabled={!body.trim()}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -421,11 +455,11 @@ export function CommentsPanel({
                 fontWeight: 500,
                 padding: '5px 10px',
                 cursor: 'pointer',
-                opacity: pending || !body.trim() ? 0.5 : 1,
+                opacity: !body.trim() ? 0.5 : 1,
               }}
             >
-              {pending ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
-              {pending ? 'Posting…' : 'Post'}
+              <Send size={11} />
+              Post
             </button>
           </div>
         </div>
@@ -559,257 +593,238 @@ function CommentItem({
     });
   };
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const hasMenu = true;
+
   return (
     <div
       style={{
         display: 'flex',
-        gap: 12,
-        opacity: resolved ? 0.6 : 1,
+        flexDirection: 'column',
+        gap: 4,
+        opacity: resolved ? 0.55 : 1,
         transition: 'opacity 200ms ease-out',
       }}
     >
-      <UserAvatar
-        name={comment.author.name}
-        email={comment.author.email}
-        avatarUrl={comment.author.avatar_url}
-        size={28}
-        background={t.accentSubtle}
-        color={t.accent}
-      />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 500, color: t.textPrimary }}>
-            {comment.author.name ?? comment.author.email}
-          </span>
-          <span
-            style={{
-              fontFamily: editorialFonts.mono,
-              fontSize: 10,
-              letterSpacing: '0.06em',
-              
-              color: t.textDisabled,
-            }}
-          >
-            {comment.author.role}
-          </span>
-          {resolved ? (
-            <span
-              title={comment.resolved_at ? `Resolved ${new Date(comment.resolved_at).toLocaleString()}` : 'Resolved'}
+      {/* Header: avatar + name/role/date + more menu */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <UserAvatar
+          name={comment.author.name}
+          email={comment.author.email}
+          avatarUrl={comment.author.avatar_url}
+          size={28}
+          background={t.accentSubtle}
+          color={t.accent}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: t.textPrimary }}>
+              {comment.author.name ?? comment.author.email}
+            </span>
+            <span style={{ fontFamily: editorialFonts.mono, fontSize: 9, letterSpacing: '0.06em', color: t.textDisabled }}>
+              {comment.author.role}
+            </span>
+            {resolved ? (
+              <span title="Resolved" style={{ display: 'inline-flex', alignItems: 'center', color: t.success }}>
+                <Check size={10} />
+              </span>
+            ) : null}
+          </div>
+          <span style={{ fontSize: 10, color: t.textDisabled }}>{dateLabel}</span>
+        </div>
+        {hasMenu ? (
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 3,
-                fontFamily: editorialFonts.mono,
-                fontSize: 13,
-                letterSpacing: '0.06em',
-                
-                color: t.success,
-                background: 'transparent',
-                padding: '1px 6px',
-                borderRadius: 999,
-                border: `1px solid ${t.border}`,
+                justifyContent: 'center',
+                width: 24,
+                height: 24,
+                borderRadius: 6,
+                border: 'none',
+                background: menuOpen ? t.surface : 'transparent',
+                color: t.textDisabled,
+                cursor: 'pointer',
               }}
             >
-              <Check size={9} /> Resolved
-            </span>
-          ) : null}
-        </div>
-        {editing ? (
-          <div
-            style={{
-              marginTop: 4,
-              padding: 6,
-              borderRadius: 8,
-              border: `1px solid ${t.borderVisible}`,
-              background: t.surface,
-            }}
-          >
-            <MentionTextarea
-              value={draft}
-              onChange={setDraft}
-              mentionables={mentionables}
-              t={t}
-              placeholder="Edit comment…"
-              rows={2}
-              autoFocus
-              onSubmitShortcut={() => onSaveEdit()}
-              onEscape={onCancelEdit}
-            />
-            {editError ? (
-              <p style={{ margin: '4px 0 0', fontSize: 11, color: t.danger }}>{editError}</p>
+              <MoreHorizontal size={14} />
+            </button>
+            {menuOpen ? (
+              <>
+                {/* Backdrop to close menu */}
+                {/* biome-ignore lint/a11y/useKeyWithClickEvents: click-away dismiss */}
+                <div
+                  onClick={() => setMenuOpen(false)}
+                  style={{ position: 'fixed', inset: 0, zIndex: 29 }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    zIndex: 30,
+                    marginTop: 4,
+                    minWidth: 120,
+                    background: t.black,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 8,
+                    boxShadow: '0 8px 24px -6px rgba(0,0,0,0.4)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <button
+                    type="button"
+                    disabled={translating}
+                    onClick={() => { setMenuOpen(false); void onToggleTranslate(); }}
+                    style={{ ...menuItemStyle(t), ...(showTranslation ? { color: t.accent } : {}) }}
+                  >
+                    {translating ? <Loader2 size={12} className="animate-spin" /> : <Languages size={12} />}
+                    {showTranslation ? 'Original' : 'Translate'}
+                  </button>
+                  {canEdit ? (
+                    <button type="button" onClick={() => { setMenuOpen(false); setEditing(true); }} style={menuItemStyle(t)}>
+                      <Pencil size={12} /> Edit
+                    </button>
+                  ) : null}
+                  {isAgency ? (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => { setMenuOpen(false); onToggleResolve(); }}
+                      style={menuItemStyle(t)}
+                    >
+                      {resolved ? <RotateCcw size={12} /> : <Check size={12} />}
+                      {resolved ? 'Reopen' : 'Resolve'}
+                    </button>
+                  ) : null}
+                  {canDelete ? (
+                    <button type="button" disabled={pending} onClick={() => { setMenuOpen(false); onDelete(); }} style={{ ...menuItemStyle(t), color: t.danger }}>
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  ) : null}
+                </div>
+              </>
             ) : null}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
-              <button
-                type="button"
-                onClick={onCancelEdit}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  padding: '3px 8px',
-                  borderRadius: 6,
-                  border: 'none',
-                  background: 'transparent',
-                  color: t.textSecondary,
-                  fontFamily: editorialFonts.body,
-                  fontSize: 11,
-                  cursor: 'pointer',
-                }}
-              >
-                <X size={10} /> Cancel
-              </button>
-              <button
-                type="button"
-                onClick={onSaveEdit}
-                disabled={pending || draft.trim().length === 0}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  padding: '3px 10px',
-                  borderRadius: 6,
-                  border: 'none',
-                  background: t.accent,
-                  color: 'white',
-                  fontFamily: editorialFonts.body,
-                  fontSize: 11,
-                  fontWeight: 500,
-                  cursor: pending || draft.trim().length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: pending || draft.trim().length === 0 ? 0.5 : 1,
-                }}
-              >
-                {pending ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                Save
-              </button>
-            </div>
-          </div>
-        ) : (
-          <p
-            style={{
-              margin: '4px 0 0',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              fontSize: 14,
-              color: t.textPrimary,
-              textDecoration: resolved ? 'line-through' : 'none',
-              textDecorationColor: t.textDisabled,
-            }}
-          >
-            {renderCommentBody(
-              showTranslation && translated ? translated : comment.body,
-              t.accent,
-            )}
-          </p>
-        )}
-        {!editing ? (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginTop: 6,
-              gap: 8,
-            }}
-          >
-            <p style={{ margin: 0, fontSize: 10, color: t.textDisabled }}>{dateLabel}</p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <button
-                type="button"
-                onClick={() => void onToggleTranslate()}
-                title={showTranslation ? 'Show original text' : 'Translate this comment'}
-                style={{
-                  ...chipBtnStyle(t),
-                  ...(showTranslation ? { color: t.accent } : {}),
-                }}
-                disabled={translating}
-              >
-                {translating ? (
-                  <Loader2 size={10} className="animate-spin" />
-                ) : (
-                  <Languages size={10} />
-                )}
-                {showTranslation ? 'Original' : 'Translate'}
-              </button>
-              {onReplyClick ? (
-                <button
-                  type="button"
-                  onClick={onReplyClick}
-                  title="Reply"
-                  style={chipBtnStyle(t)}
-                >
-                  <Reply size={10} /> Reply
-                </button>
-              ) : null}
-              {canEdit ? (
-                <button
-                  type="button"
-                  onClick={() => setEditing(true)}
-                  title="Edit your comment"
-                  style={chipBtnStyle(t)}
-                  disabled={pending}
-                >
-                  <Pencil size={10} /> Edit
-                </button>
-              ) : null}
-              {canDelete ? (
-                <button
-                  type="button"
-                  onClick={onDelete}
-                  title="Delete comment"
-                  disabled={pending}
-                  style={{
-                    ...chipBtnStyle(t),
-                    color: t.danger,
-                  }}
-                >
-                  <Trash2 size={10} /> Delete
-                </button>
-              ) : null}
-              {isAgency ? (
-                <button
-                  type="button"
-                  onClick={onToggleResolve}
-                  disabled={pending}
-                  title={resolved ? 'Mark as unresolved' : 'Mark as resolved'}
-                  style={{
-                    ...chipBtnStyle(t),
-                    color: resolved ? t.textSecondary : t.textPrimary,
-                    cursor: pending ? 'not-allowed' : 'pointer',
-                    opacity: pending ? 0.5 : 1,
-                  }}
-                >
-                  {pending ? (
-                    <Loader2 size={10} className="animate-spin" />
-                  ) : resolved ? (
-                    <RotateCcw size={10} />
-                  ) : (
-                    <Check size={10} />
-                  )}
-                  {resolved ? 'Reopen' : 'Resolve'}
-                </button>
-              ) : null}
-            </div>
           </div>
         ) : null}
       </div>
+
+      {/* Body */}
+      {editing ? (
+        <div
+          style={{
+            padding: 6,
+            borderRadius: 8,
+            border: `1px solid ${t.borderVisible}`,
+            background: t.surface,
+          }}
+        >
+          <MentionTextarea
+            value={draft}
+            onChange={setDraft}
+            mentionables={mentionables}
+            t={t}
+            placeholder="Edit comment..."
+            rows={2}
+            autoFocus
+            onSubmitShortcut={() => onSaveEdit()}
+            onEscape={onCancelEdit}
+          />
+          {editError ? (
+            <p style={{ margin: '4px 0 0', fontSize: 11, color: t.danger }}>{editError}</p>
+          ) : null}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 8px',
+                borderRadius: 6, border: 'none', background: 'transparent',
+                color: t.textSecondary, fontFamily: editorialFonts.body, fontSize: 11, cursor: 'pointer',
+              }}
+            >
+              <X size={10} /> Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSaveEdit}
+              disabled={pending || draft.trim().length === 0}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 10px',
+                borderRadius: 6, border: 'none', background: t.accent, color: 'white',
+                fontFamily: editorialFonts.body, fontSize: 11, fontWeight: 500,
+                cursor: pending || draft.trim().length === 0 ? 'not-allowed' : 'pointer',
+                opacity: pending || draft.trim().length === 0 ? 0.5 : 1,
+              }}
+            >
+              {pending ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+              Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p
+          style={{
+            margin: 0,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            fontSize: 13,
+            lineHeight: 1.45,
+            color: t.textPrimary,
+            textDecoration: resolved ? 'line-through' : 'none',
+            textDecorationColor: t.textDisabled,
+          }}
+        >
+          {renderCommentBody(
+            showTranslation && translated ? translated : comment.body,
+            t.accent,
+          )}
+        </p>
+      )}
+
+      {/* Reply link */}
+      {!editing && onReplyClick ? (
+        <button
+          type="button"
+          onClick={onReplyClick}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            alignSelf: 'flex-start',
+            gap: 4,
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            color: t.textDisabled,
+            fontFamily: editorialFonts.body,
+            fontSize: 11,
+            cursor: 'pointer',
+          }}
+        >
+          Reply
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function chipBtnStyle(t: ReturnType<typeof getNd>) {
+function menuItemStyle(t: ReturnType<typeof getNd>) {
   return {
-    display: 'inline-flex',
+    display: 'flex',
     alignItems: 'center',
-    gap: 4,
-    padding: '3px 8px',
-    borderRadius: 999,
-    border: `1px solid ${t.border}`,
+    gap: 8,
+    width: '100%',
+    padding: '7px 12px',
+    border: 'none',
     background: 'transparent',
     color: t.textPrimary,
     fontFamily: editorialFonts.body,
-    fontSize: 10,
-    fontWeight: 500,
+    fontSize: 12,
     cursor: 'pointer',
+    textAlign: 'left' as const,
   };
 }
 
@@ -935,30 +950,25 @@ function ReplyForm({
 }): ReactNode {
   const router = useRouter();
   const [body, setBody] = useState('');
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
-    if (!body.trim()) return;
-    setPending(true);
+    const text = body.trim();
+    if (!text) return;
     setError(null);
+    setBody('');
+    onClose();
+
     try {
-      const res = await postComment({
-        frameRowId,
-        appId,
-        appSlug,
-        body: body.trim(),
-        parentId,
-      });
-      if (res.error) throw new Error(res.error);
-      setBody('');
-      onClose();
-      router.refresh();
+      const res = await postComment({ frameRowId, appId, appSlug, body: text, parentId });
+      if (res.error) {
+        setError(res.error);
+      } else {
+        router.refresh();
+      }
     } catch (err) {
       setError((err as Error).message);
-    } finally {
-      setPending(false);
     }
   }
 
@@ -1026,7 +1036,7 @@ function ReplyForm({
         </button>
         <button
           type="submit"
-          disabled={pending || !body.trim()}
+          disabled={!body.trim()}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -1040,10 +1050,10 @@ function ReplyForm({
             fontSize: 11,
             fontWeight: 500,
             cursor: 'pointer',
-            opacity: pending || !body.trim() ? 0.5 : 1,
+            opacity: !body.trim() ? 0.5 : 1,
           }}
         >
-          {pending ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
+          <Send size={10} />
           Reply
         </button>
       </div>

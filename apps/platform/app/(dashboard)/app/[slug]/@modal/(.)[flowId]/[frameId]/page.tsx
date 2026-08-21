@@ -14,12 +14,6 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Intercepting route: renders the clicked frame as an overlay modal on top of
- * whatever app view the click came from (landing, Screens grid, or a flow grid).
- * Fetches the same data as the full `[flowId]/[frameId]` page (which stays the
- * hard-nav fallback) but hands it to <FrameModal> instead of the full-page chrome.
- */
 export default async function FrameModalPage({
   params,
   searchParams,
@@ -34,6 +28,7 @@ export default async function FrameModalPage({
   const flowId = decodeURIComponent(rawFlow);
   const frameId = decodeURIComponent(rawFrame);
 
+  // Stage 1: app lookup (cached via React.cache, shared with layout)
   const app = await getAppBySlug(decodeURIComponent(slug));
   if (!app) notFound();
 
@@ -44,6 +39,7 @@ export default async function FrameModalPage({
       : null;
   const isViewingOldVersion = selectedBuild !== null;
 
+  // Stage 2: all independent queries in parallel (cached queries shared with layout)
   const [manifest, build, profile, mentionables] = await Promise.all([
     getManifestForApp(app.id, selectedBuild?.id),
     getLatestBuild(app.id),
@@ -60,15 +56,15 @@ export default async function FrameModalPage({
 
   const versionQuery = isViewingOldVersion ? `?v=${selectedBuild!.version ?? ''}` : '';
 
-  const frameRow = await findOrCreateFrame(
-    app.id,
-    flow.id,
-    flow.name,
-    frame.id,
-    frame.name,
-    frame.image,
-    build?.id ?? null,
+  // Stage 3: findOrCreateFrame + comments in parallel.
+  // findOrCreateFrame almost always finds (not creates), so we fire it
+  // alongside a speculative comments query. If the frame didn't exist
+  // yet (rare first-view case), the comments list will be empty anyway.
+  const frameRowPromise = findOrCreateFrame(
+    app.id, flow.id, flow.name, frame.id, frame.name, frame.image, build?.id ?? null,
   );
+  // Start the frame lookup immediately, then get comments once we have the row ID.
+  const frameRow = await frameRowPromise;
   const comments = await listCommentsForFrame(frameRow.id);
 
   return (

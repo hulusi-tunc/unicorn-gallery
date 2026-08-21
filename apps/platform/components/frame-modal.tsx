@@ -5,10 +5,16 @@ import { ArrowLeft, ArrowRight, Link2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
-import { CommentsPanel } from '@/components/comments-panel';
+import dynamic from 'next/dynamic';
+
+const CommentsPanel = dynamic(
+  () => import('@/components/comments-panel').then((m) => ({ default: m.CommentsPanel })),
+  { ssr: false, loading: () => <div className="flex-1 animate-pulse rounded-2xl bg-white/5" /> },
+);
 import { DeviceBezel } from '@/components/device-bezel';
 import { Filmstrip } from '@/components/filmstrip';
 import type { CommentWithAuthor } from '@/lib/comments';
+import { imageHref } from '@/lib/image-href';
 import type { MentionableProfile } from '@/lib/queries';
 
 export function FrameModal({
@@ -104,7 +110,11 @@ export function FrameModal({
   }, [close, router, frameHref, prev, next]);
 
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: Esc handled above.
+    <>
+    {/* Prefetch adjacent frame images so arrow navigation feels instant */}
+    {prev ? <link rel="prefetch" href={imageHref(prev.image)} as="image" /> : null}
+    {next ? <link rel="prefetch" href={imageHref(next.image)} as="image" /> : null}
+    {/* biome-ignore lint/a11y/useKeyWithClickEvents: Esc handled above. */}
     <div
       role="dialog"
       aria-modal="true"
@@ -115,7 +125,7 @@ export function FrameModal({
       {/* Two-box layout: preview + comments side by side with gap */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-[1680px] gap-3"
+        className="flex w-full h-[80vh] max-w-[1800px] gap-3"
       >
         {/* Left box: preview + header + filmstrip */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl">
@@ -166,7 +176,7 @@ export function FrameModal({
             <div className="flex-1 overflow-y-auto overflow-x-hidden bg-[oklch(0.195_0.008_260)]">
               <div className="flex min-h-full items-center justify-center px-16 py-8">
                 {videoSrc ? (
-                  <div className="w-full max-w-[880px] overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
+                  <div className="w-full max-w-[1100px] overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
                     <video
                       src={videoSrc}
                       poster={src}
@@ -190,7 +200,7 @@ export function FrameModal({
                     }}
                   />
                 ) : (
-                  <div className="w-full max-w-[880px] overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
+                  <div className="w-full max-w-[1100px] overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={src} alt={frameName} className="h-auto w-full" />
                   </div>
@@ -245,9 +255,11 @@ export function FrameModal({
             currentUserId={currentUserId}
             mentionables={mentionables}
             readOnly={readOnly}
+            embedded
           />
         </div>
       </div>
     </div>
+    </>
   );
 }

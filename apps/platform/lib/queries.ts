@@ -568,7 +568,7 @@ export interface MentionableProfile {
   avatar_url: string | null;
 }
 
-export async function getMentionableProfilesForApp(
+export const getMentionableProfilesForApp = cache(async function getMentionableProfilesForApp(
   appId: string,
 ): Promise<MentionableProfile[]> {
   const supabase = await getSupabaseServerClient();
@@ -607,7 +607,7 @@ export async function getMentionableProfilesForApp(
     out.push({ ...p, handle: handleFromEmail(p.email) });
   }
   return out;
-}
+});
 
 function handleFromEmail(email: string): string {
   return (email.split('@')[0] ?? email).toLowerCase().replace(/[^a-z0-9_.-]/g, '');
@@ -753,7 +753,7 @@ export async function listFramesForApp(appId: string): Promise<Frame[]> {
   // last via `nullsFirst: false`, then by flow_id/frame_id as fallback.
   const { data, error } = await supabase
     .from('frames')
-    .select('*')
+    .select('id, app_id, flow_id, frame_id, flow_name, frame_name, latest_image_url, latest_video_url, flow_position, frame_position, parent_flow_id, latest_build_id')
     .eq('app_id', appId)
     .order('flow_position', { ascending: true, nullsFirst: false })
     .order('flow_id', { ascending: true })
