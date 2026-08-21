@@ -13,3 +13,4 @@ out/
 coverage/
 .env*.local
 *.tsbuildinfo
+.wrangler/
