@@ -37,7 +37,7 @@ export function ScreensGrid({
   );
 
   return (
-    <div className="flex flex-wrap gap-x-8 gap-y-10 px-10 py-8">
+    <div className="grid grid-cols-3 gap-5 px-2 py-4">
       {cards.map(({ flow, frame }) => {
         const unresolved = unresolvedByFrame?.get(frame.id) ?? null;
         return (

@@ -103,6 +103,11 @@ export function FlowSidebar({
     };
   }, [resizing, width]);
 
+  const isScreensTab = searchParams?.get('tab') === 'screens';
+
+  // Hide sidebar entirely on Screens tab (Mobbin shows full-width grid)
+  if (isScreensTab) return null;
+
   return (
     <aside
       style={{
