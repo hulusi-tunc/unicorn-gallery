@@ -16,6 +16,10 @@ export async function postComment(input: {
   appSlug: string;
   body: string;
   parentId?: string | null;
+  pinX?: number | null;
+  pinY?: number | null;
+  pinW?: number | null;
+  pinH?: number | null;
 }): Promise<{ ok?: true; error?: string; commentId?: string }> {
   const profile = await getCurrentProfile();
   if (!profile) return { error: 'Not signed in.' };
@@ -31,6 +35,10 @@ export async function postComment(input: {
       author_id: profile.id,
       parent_id: input.parentId ?? null,
       body,
+      pin_x: input.pinX ?? null,
+      pin_y: input.pinY ?? null,
+      pin_w: input.pinW ?? null,
+      pin_h: input.pinH ?? null,
     })
     .select('id, frame_id')
     .single();

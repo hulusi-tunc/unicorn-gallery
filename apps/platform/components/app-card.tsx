@@ -115,7 +115,7 @@ export function AppCard({
       <div
         style={{
           aspectRatio: isMobile ? '4 / 4.5' : '4 / 3',
-          borderRadius: 16,
+          borderRadius: 12,
           overflow: 'hidden',
           background: t.surface,
           position: 'relative',

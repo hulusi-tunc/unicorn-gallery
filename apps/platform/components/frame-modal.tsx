@@ -4,7 +4,7 @@ import type { ManifestFlow, Platform } from '@unicorn-studio/gallery-capture';
 import { ArrowLeft, ArrowRight, Link2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 
 const CommentsPanel = dynamic(
@@ -13,7 +13,9 @@ const CommentsPanel = dynamic(
 );
 import { DeviceBezel } from '@/components/device-bezel';
 import { Filmstrip } from '@/components/filmstrip';
+import { PinOverlay, PinPopover, type PinDraft } from '@/components/pin-overlay';
 import type { CommentWithAuthor } from '@/lib/comments';
+import { postComment } from '@/lib/actions/comments';
 import { imageHref } from '@/lib/image-href';
 import type { MentionableProfile } from '@/lib/queries';
 
@@ -62,6 +64,39 @@ export function FrameModal({
   const router = useRouter();
   const isMobile = platform !== 'web';
   const [copied, setCopied] = useState(false);
+  const [pendingPin, setPendingPin] = useState<PinDraft | null>(null);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const pinContainerRef = useRef<HTMLDivElement>(null);
+
+  const handlePinPlace = useCallback((pin: PinDraft) => {
+    if (readOnly) return;
+    setPendingPin(pin);
+    setActiveCommentId(null);
+  }, [readOnly]);
+
+  const handlePinSubmit = useCallback(async (body: string) => {
+    if (!pendingPin) return;
+    setPendingPin(null);
+    const res = await postComment({
+      frameRowId,
+      appId,
+      appSlug,
+      body,
+      pinX: pendingPin.x,
+      pinY: pendingPin.y,
+      pinW: pendingPin.w ?? null,
+      pinH: pendingPin.h ?? null,
+    });
+    if (res.ok) router.refresh();
+  }, [pendingPin, frameRowId, appId, appSlug, router]);
+
+  const handlePinCancel = useCallback(() => {
+    setPendingPin(null);
+  }, []);
+
+  const handlePinClick = useCallback((commentId: string) => {
+    setActiveCommentId((prev) => (prev === commentId ? null : commentId));
+  }, []);
 
   const idx = flow.frames.findIndex((f) => f.id === activeFrameId);
   const total = flow.frames.length;
@@ -95,7 +130,11 @@ export function FrameModal({
     const onKey = (e: KeyboardEvent): void => {
       const el = e.target as HTMLElement | null;
       const typing = el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable;
-      if (e.key === 'Escape') { close(); return; }
+      if (e.key === 'Escape') {
+        if (pendingPin) { setPendingPin(null); return; }
+        close();
+        return;
+      }
       if (typing) return;
       if (e.key === 'ArrowLeft' && prev) { e.preventDefault(); router.replace(frameHref(prev.id)); }
       else if (e.key === 'ArrowRight' && next) { e.preventDefault(); router.replace(frameHref(next.id)); }
@@ -107,7 +146,7 @@ export function FrameModal({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [close, router, frameHref, prev, next]);
+  }, [close, router, frameHref, prev, next, pendingPin]);
 
   return (
     <>
@@ -120,7 +159,7 @@ export function FrameModal({
       aria-modal="true"
       aria-label={flow.name}
       onClick={close}
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="dark fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
     >
       {/* Two-box layout: preview + comments side by side with gap */}
       <div
@@ -200,9 +239,28 @@ export function FrameModal({
                     }}
                   />
                 ) : (
-                  <div className="w-full max-w-[1100px] overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={frameName} className="h-auto w-full" />
+                  <div className="w-full max-w-[1100px]" ref={pinContainerRef}>
+                    <PinOverlay
+                      comments={comments}
+                      activeCommentId={activeCommentId}
+                      onPinPlace={handlePinPlace}
+                      onPinClick={handlePinClick}
+                      readOnly={readOnly}
+                    >
+                      <div className="overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={src} alt={frameName} className="h-auto w-full" />
+                      </div>
+                      {pendingPin && (
+                        <PinPopover
+                          pin={pendingPin}
+                          containerRef={pinContainerRef}
+                          onSubmit={handlePinSubmit}
+                          onCancel={handlePinCancel}
+                          mentionables={mentionables}
+                        />
+                      )}
+                    </PinOverlay>
                   </div>
                 )}
               </div>
@@ -256,6 +314,9 @@ export function FrameModal({
             mentionables={mentionables}
             readOnly={readOnly}
             embedded
+            forceDark
+            activeCommentId={activeCommentId}
+            onCommentClick={handlePinClick}
           />
         </div>
       </div>

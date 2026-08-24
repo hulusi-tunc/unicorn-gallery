@@ -81,7 +81,7 @@ export function UnicornLogo({
       {...handlers}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={asset.light} alt="" aria-hidden className="block dark:hidden" style={imgStyle} />
+      <img src={asset.light} alt="" aria-hidden className="block dark:hidden" style={{ ...imgStyle, filter: 'brightness(0)' }} />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={asset.dark} alt="" aria-hidden className="hidden dark:block" style={imgStyle} />
     </span>

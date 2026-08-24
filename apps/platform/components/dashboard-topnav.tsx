@@ -63,7 +63,9 @@ export function DashboardTopNav({
 
   const navInnerStyle: CSSProperties = {
     width: '100%',
-    width: '80%',
+    width: '100%',
+    maxWidth: 1600,
+    padding: '0 24px',
     display: 'flex',
     alignItems: 'center',
     gap: 20,
@@ -74,7 +76,7 @@ export function DashboardTopNav({
     height: 36,
     borderRadius: swatchRadii.full,
     border: 'none',
-    background: searchHovered ? t.surface : t.surfaceInk,
+    background: searchHovered ? t.surfaceRaised : t.surface,
     display: 'flex',
     alignItems: 'center',
     padding: '0 14px',
@@ -105,7 +107,7 @@ export function DashboardTopNav({
             transition: 'color 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
           }}
         >
-          <UnicornLogo variant="mark" height={22} color="currentColor" />
+          <UnicornLogo variant="mark" height={28} color={theme === 'dark' ? 'white' : 'black'} />
         </Link>
         <Link
           href="/apps"
@@ -143,9 +145,12 @@ export function DashboardTopNav({
 
       <div
         style={{
-          flex: 1,
-          maxWidth: 420,
-          margin: '0 auto',
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 'min(420px, 36vw)',
+          minWidth: 240,
         }}
       >
         <button
@@ -257,21 +262,33 @@ function IconButton({
   type?: 'button' | 'submit';
   'aria-label'?: string;
 }): ReactNode {
-  const style: CSSProperties = {
-    width: 32,
-    height: 32,
-    borderRadius: swatchRadii.md,
-    border: 'none',
-    background: 'transparent',
-    color: t.textSecondary,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    transition: 'background 120ms ease-out, color 120ms ease-out',
-  };
   return (
-    <button type={type} onClick={onClick} aria-label={ariaLabel} style={style}>
+    <button
+      type={type}
+      onClick={onClick}
+      aria-label={ariaLabel}
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: swatchRadii.lg,
+        border: 'none',
+        background: 'transparent',
+        color: t.textPrimary,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        transition: 'background 120ms ease-out, color 120ms ease-out',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = t.surface;
+        e.currentTarget.style.color = t.textDisplay;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = t.textPrimary;
+      }}
+    >
       {children}
     </button>
   );

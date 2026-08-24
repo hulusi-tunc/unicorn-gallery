@@ -52,6 +52,9 @@ export function CommentsPanel({
   mentionables,
   readOnly = false,
   embedded = false,
+  forceDark = false,
+  activeCommentId = null,
+  onCommentClick,
 }: {
   frameRowId: string;
   comments: CommentWithAuthor[];
@@ -71,10 +74,16 @@ export function CommentsPanel({
   readOnly?: boolean;
   /** When true, fills parent width - no own width/resize/border. Used inside the frame modal. */
   embedded?: boolean;
+  /** Force dark theme tokens regardless of user preference. Used inside the always-dark modal. */
+  forceDark?: boolean;
+  /** Highlight a specific comment (linked to a pin on the image). */
+  activeCommentId?: string | null;
+  /** Called when a pinned comment is clicked in the sidebar. */
+  onCommentClick?: (commentId: string) => void;
 }): ReactNode {
   const router = useRouter();
   const { theme } = useTheme();
-  const t = getNd(theme);
+  const t = getNd(forceDark ? 'dark' : theme);
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
@@ -145,6 +154,15 @@ export function CommentsPanel({
   }, [comments]);
 
   const threads = useMemo(() => buildThreads(allComments), [allComments]);
+
+  const pinnedCommentNumbers = useMemo(() => {
+    const map = new Map<string, number>();
+    allComments
+      .filter((c) => c.pin_x != null && c.pin_y != null && !c.parent_id)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .forEach((c, i) => map.set(c.id, i + 1));
+    return map;
+  }, [allComments]);
   const visibleThreads = useMemo(
     () =>
       showResolved
@@ -169,6 +187,10 @@ export function CommentsPanel({
       author_id: currentUserId ?? '',
       parent_id: null,
       body: text,
+      pin_x: null,
+      pin_y: null,
+      pin_w: null,
+      pin_h: null,
       created_at: new Date().toISOString(),
       resolved_at: null,
       resolved_by: null,
@@ -362,6 +384,9 @@ export function CommentsPanel({
               appId={appId}
               currentUserId={currentUserId}
               mentionables={mentionables}
+              activeCommentId={activeCommentId}
+              onCommentClick={onCommentClick}
+              pinNumber={thread.root.pin_x != null ? pinnedCommentNumbers.get(thread.root.id) : undefined}
             />
           ))
         )}
@@ -477,6 +502,7 @@ function CommentItem({
   currentUserId,
   mentionables,
   onReplyClick,
+  pinNumber,
 }: {
   comment: CommentWithAuthor;
   t: ReturnType<typeof getNd>;
@@ -486,6 +512,7 @@ function CommentItem({
   mentionables: MentionableProfile[];
   /** When set, shows a Reply button — only on thread roots, not on replies. */
   onReplyClick?: () => void;
+  pinNumber?: number;
 }): ReactNode {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -606,8 +633,28 @@ function CommentItem({
         transition: 'opacity 200ms ease-out',
       }}
     >
-      {/* Header: avatar + name/role/date + more menu */}
+      {/* Header: pin badge + avatar + name/role/date + more menu */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {pinNumber != null && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              background: 'oklch(0.5 0.2 250)',
+              color: 'white',
+              fontSize: 10,
+              fontWeight: 700,
+              flexShrink: 0,
+              lineHeight: 1,
+            }}
+          >
+            {pinNumber}
+          </span>
+        )}
         <UserAvatar
           name={comment.author.name}
           email={comment.author.email}
@@ -785,7 +832,7 @@ function CommentItem({
         </p>
       )}
 
-      {/* Reply link */}
+      {/* Reply button */}
       {!editing && onReplyClick ? (
         <button
           type="button"
@@ -794,16 +841,19 @@ function CommentItem({
             display: 'inline-flex',
             alignItems: 'center',
             alignSelf: 'flex-start',
-            gap: 4,
-            padding: 0,
-            border: 'none',
+            gap: 5,
+            padding: '4px 10px',
+            borderRadius: 6,
+            border: `1px solid ${t.border}`,
             background: 'transparent',
-            color: t.textDisabled,
+            color: t.textSecondary,
             fontFamily: editorialFonts.body,
             fontSize: 11,
+            fontWeight: 500,
             cursor: 'pointer',
           }}
         >
+          <CornerDownRight size={11} />
           Reply
         </button>
       ) : null}
@@ -862,6 +912,9 @@ function ThreadView({
   appId,
   currentUserId,
   mentionables,
+  activeCommentId,
+  onCommentClick,
+  pinNumber,
 }: {
   thread: Thread;
   t: ReturnType<typeof getNd>;
@@ -871,10 +924,32 @@ function ThreadView({
   appId: string;
   currentUserId: string | null;
   mentionables: MentionableProfile[];
+  activeCommentId?: string | null;
+  onCommentClick?: (commentId: string) => void;
+  pinNumber?: number;
 }): ReactNode {
   const [replyOpen, setReplyOpen] = useState(false);
+  const isActive = activeCommentId === thread.root.id;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div
+      data-comment-thread={thread.root.id}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        borderRadius: 8,
+        padding: isActive ? '8px' : undefined,
+        margin: isActive ? '-8px' : undefined,
+        background: isActive ? 'oklch(0.55 0.18 250 / 0.08)' : undefined,
+        transition: 'background 150ms ease-out',
+        cursor: thread.root.pin_x != null ? 'pointer' : undefined,
+      }}
+      onClick={() => {
+        if (thread.root.pin_x != null && onCommentClick) {
+          onCommentClick(thread.root.id);
+        }
+      }}
+    >
       <CommentItem
         comment={thread.root}
         t={t}
@@ -883,6 +958,7 @@ function ThreadView({
         currentUserId={currentUserId}
         mentionables={mentionables}
         onReplyClick={() => setReplyOpen((v) => !v)}
+        pinNumber={pinNumber}
       />
       {thread.replies.length > 0 ? (
         <div

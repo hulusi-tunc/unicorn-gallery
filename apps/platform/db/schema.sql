@@ -290,6 +290,8 @@ create table if not exists public.comments (
   body text not null check (length(body) > 0 and length(body) < 10000),
   pin_x real check (pin_x is null or (pin_x >= 0 and pin_x <= 1)),
   pin_y real check (pin_y is null or (pin_y >= 0 and pin_y <= 1)),
+  pin_w real check (pin_w is null or (pin_w >= 0 and pin_w <= 1)),
+  pin_h real check (pin_h is null or (pin_h >= 0 and pin_h <= 1)),
   resolved_at timestamptz,
   resolved_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now()

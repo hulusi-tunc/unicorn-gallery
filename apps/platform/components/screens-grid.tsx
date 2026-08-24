@@ -31,7 +31,7 @@ export function ScreensGrid({
   );
 
   return (
-    <div className="grid grid-cols-3 gap-5 px-2 py-4">
+    <div className="grid grid-cols-3 gap-4 py-4">
       {cards.map(({ flow, frame }) => {
         const unresolved = unresolvedByFrame?.get(frame.id) ?? null;
         return (
@@ -42,7 +42,7 @@ export function ScreensGrid({
           >
             {/* Card container */}
             <div
-              className="relative overflow-hidden rounded-2xl bg-[oklch(0.96_0.004_260)] transition-all duration-200 group-hover:scale-[1.02] dark:bg-[oklch(0.19_0.007_260)]"
+              className="relative overflow-hidden rounded-xl bg-[oklch(0.96_0.004_260)] transition-all duration-200 group-hover:scale-[1.01] dark:bg-[oklch(0.19_0.007_260)]"
               style={{ aspectRatio: isMobile ? '3 / 4' : '16 / 10' }}
             >
               {unresolved && unresolved.count > 0 ? (

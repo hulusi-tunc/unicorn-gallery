@@ -97,7 +97,7 @@ export default async function AppOverviewPage({
   const totalFlows = manifest.flows.filter((f) => f.frames.length > 0).length;
 
   return (
-    <main className={`relative flex flex-1 flex-col bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)] ${activeTab === 'flows' ? 'pl-8' : ''}`}>
+    <main className={`relative flex min-w-0 flex-1 flex-col overflow-x-hidden bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)] ${activeTab === 'flows' ? 'pl-6' : ''}`}>
       <HashScroller />
 
       {/* Tab bar - only visible when NO sidebar (Screens tab) */}

@@ -1,6 +1,5 @@
 'use client';
 
-import { SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { AppCard } from '@/components/app-card';
@@ -52,7 +51,7 @@ export function AppsGrid({
   }
 
   return (
-    <div className="mx-auto w-[80%] pt-5 pb-10">
+    <div className="mx-auto w-full max-w-[1600px] px-6 pt-5 pb-10 lg:px-10 xl:px-16">
       <div className="flex items-center gap-5 pb-4">
         {/* Platform toggle */}
         <div className="inline-flex items-center rounded-full bg-[oklch(0.93_0.004_260)] p-[3px] dark:bg-[oklch(0.22_0.008_260)]">
@@ -106,17 +105,10 @@ export function AppsGrid({
           </nav>
         ) : null}
 
-        <div className="ml-auto flex items-center gap-3">
-          {isAgency ? (
-            <Link
-              href="/dor/team"
-              className="inline-flex shrink-0 items-center gap-1.5 text-sm text-[oklch(0.42_0.008_260)] transition-colors hover:text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.52_0.01_260)] dark:hover:text-[oklch(0.97_0.005_260)]"
-            >
-              <SlidersHorizontal size={15} />
-              Filter
-            </Link>
-          ) : null}
-        </div>
+        {/* App count */}
+        <span className="ml-auto text-[13px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.52_0.01_260)]">
+          {filtered.length} app{filtered.length === 1 ? '' : 's'}
+        </span>
       </div>
 
       {filtered.length === 0 ? (
@@ -127,7 +119,7 @@ export function AppsGrid({
             : 'Open Unicorn Capture and push a project to get started.'}
         />
       ) : (
-        <div className="mt-8 grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-x-4 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((app) => (
             <AppCard
               key={app.id}

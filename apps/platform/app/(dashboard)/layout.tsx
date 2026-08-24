@@ -19,7 +19,7 @@ export default async function DashboardLayout({
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div style={{ minHeight: '100vh' }}>
+      <div style={{ minHeight: '100vh', overflowX: 'hidden' }}>
         <RealtimeRefresh table="notifications" filter={`user_id=eq.${profile.id}`} />
         <DashboardTopNav profile={profile} unreadCount={unreadCount} />
         <main style={{ paddingTop: TOPNAV_HEIGHT }}>{children}</main>

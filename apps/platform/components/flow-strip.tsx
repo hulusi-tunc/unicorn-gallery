@@ -60,7 +60,7 @@ export function FlowStrip({
       <div className="relative">
         <div
           ref={scrollRef}
-          className="no-scrollbar flex gap-4 overflow-x-auto py-3 -my-3"
+          className="no-scrollbar flex gap-3 overflow-x-auto py-3 -my-3"
         >
           {flow.frames.map((frame) => {
             const src = imageHref(frame.image);
@@ -159,12 +159,12 @@ function FlowStripCard({
     <Link
       href={href}
       className="shrink-0"
-      style={{ width: 'calc(30% - 8px)' }}
+      style={{ width: 'calc(33.333% - 9px)', minWidth: 240 }}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
       <div
-        className="relative overflow-hidden rounded-2xl bg-[oklch(0.96_0.004_260)] transition-all duration-200 hover:scale-[1.02] dark:bg-[oklch(0.19_0.007_260)]"
+        className="relative overflow-hidden rounded-xl bg-[oklch(0.96_0.004_260)] transition-all duration-200 hover:scale-[1.01] dark:bg-[oklch(0.19_0.007_260)]"
         style={{ aspectRatio: isMobile ? '3 / 4' : '16 / 10' }}
       >
         {/* Unresolved comment badge */}

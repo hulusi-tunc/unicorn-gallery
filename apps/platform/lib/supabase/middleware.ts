@@ -10,6 +10,8 @@ interface CookieToSet {
 const PUBLIC_PATHS = [
   '/sign-in',
   '/sign-up',
+  '/forgot-password',
+  '/reset-password',
   '/auth/callback',
   '/auth/error',
   '/api/dev',

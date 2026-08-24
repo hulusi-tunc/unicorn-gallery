@@ -176,6 +176,24 @@ export function SignInClient({
                 />
               </div>
 
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Link
+                  href="/forgot-password"
+                  style={{
+                    fontFamily: editorialFonts.body,
+                    fontSize: 13,
+                    color: t.textSecondary,
+                    textDecoration: 'none',
+                    borderBottom: `1px solid transparent`,
+                    transition: 'border-color 150ms',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderBottomColor = t.borderVisible; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+                >
+                  Forgot password?
+                </Link>
+              </div>
+
               {error ? (
                 <p style={{ fontFamily: editorialFonts.body, fontSize: 13, color: t.danger, margin: 0 }}>
                   {error}

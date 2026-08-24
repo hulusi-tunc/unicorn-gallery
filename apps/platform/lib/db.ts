@@ -141,6 +141,8 @@ export interface Comment {
   body: string;
   pin_x: number | null;
   pin_y: number | null;
+  pin_w: number | null;
+  pin_h: number | null;
   resolved_at: string | null;
   resolved_by: string | null;
   created_at: string;

@@ -111,7 +111,7 @@ export function AppHeader({
       }}
     >
       {/* Hero area - Mobbin style: icon above name */}
-      <div style={{ width: '80%', margin: '0 auto', paddingTop: 32, paddingBottom: 24 }}>
+      <div className="mx-auto w-full max-w-[1600px] px-6 lg:px-10 xl:px-16" style={{ paddingTop: 24, paddingBottom: 20 }}>
         <EditProjectButton
           appSlug={app.slug}
           appName={app.name}
