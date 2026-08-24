@@ -7,10 +7,23 @@ out/
 .env
 .env.local
 .env.*.local
+!.env.example
+!.env.build.example
 .vercel
 .next/
 .turbo/
 coverage/
-.env*.local
 *.tsbuildinfo
 .wrangler/
+
+# Capture desktop app (Electrobun)
+build/
+artifacts/
+artifacts-*-final/
+release-host/
+screenshots-output/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp

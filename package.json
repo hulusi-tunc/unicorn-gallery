@@ -1,8 +1,8 @@
 {
-  "name": "unicorn-studio-gallery",
+  "name": "unicorn-studio",
   "version": "0.0.0",
   "private": true,
-  "description": "Unicorn Studio internal gallery platform — capture CLI, viewer, and review platform.",
+  "description": "Unicorn Studio - capture, bridge, and gallery platform for design review.",
   "packageManager": "pnpm@10.33.2",
   "engines": {
     "node": ">=22"
@@ -10,6 +10,8 @@
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "dev:capture": "pnpm --filter @unicorn-studio/gallery-capture dev"
+    "dev": "pnpm --filter @unicorn-studio/gallery-platform dev",
+    "dev:capture": "cd apps/capture && bun run dev",
+    "dev:capture-cli": "pnpm --filter @unicorn-studio/gallery-capture dev"
   }
 }
