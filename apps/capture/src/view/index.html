@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unicorn Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap"
+  >
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="components.css">
+</head>
+<body>
+  <nav id="global-topbar" aria-label="App chrome">
+    <button class="gtb-brand" id="gtb-brand" type="button" aria-label="Back to dashboard">
+      <img src="logo.svg" alt="" class="gtb-brand-mark">
+      <span class="gtb-brand-name">Unicorn Studio</span>
+    </button>
+    <div class="gtb-search">
+      <span class="gtb-search-icon" aria-hidden="true">⌕</span>
+      <input
+        id="gtb-search-input"
+        class="gtb-search-input"
+        type="search"
+        placeholder="Search projects, flows, snaps…"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Search"
+      />
+    </div>
+    <div class="gtb-context" id="gtb-context" role="status" aria-live="polite">
+      <div class="gtb-context-name" id="gtb-context-name"></div>
+      <button
+        type="button"
+        class="gtb-context-pill"
+        id="gtb-context-pill"
+        aria-label="snap-bridge connection status"
+      >
+        <span class="dot warn" id="gtb-context-dot" aria-hidden="true"></span>
+        <span class="gtb-context-pill-label" id="gtb-context-pill-label">Waiting…</span>
+      </button>
+    </div>
+    <div class="gtb-actions" id="gtb-actions"><!-- JS populates --></div>
+  </nav>
+  <div id="app"></div>
+  <script type="module" src="index.js"></script>
+</body>
+</html>
