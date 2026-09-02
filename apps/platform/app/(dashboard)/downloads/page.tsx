@@ -1,7 +1,6 @@
 import { Chrome, Download, Monitor } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { ReleaseUploader } from '@/components/release-uploader';
 import { getCurrentProfile } from '@/lib/queries';
 import { getLatestReleases } from '@/lib/releases';
 import {
@@ -94,11 +93,10 @@ export default async function DownloadsPage(): Promise<ReactNode> {
   if (!profile) redirect('/sign-in');
 
   const releases = await getLatestReleases();
-  // Stable is what the team should get by default; canary only shows to agency.
+  // Stable is what the team should get by default.
   const stable = new Map(
     releases.filter((r) => r.channel === 'stable').map((r) => [r.kind, r]),
   );
-  const isAgency = profile.role === 'agency';
 
   return (
     <div className="w-full px-8 py-10 lg:px-12 2xl:px-16">
@@ -120,19 +118,6 @@ export default async function DownloadsPage(): Promise<ReactNode> {
           <ReleaseCard key={kind} kind={kind} release={stable.get(kind)} />
         ))}
       </div>
-
-      {isAgency ? (
-        <div className="mt-12 xl:max-w-4xl">
-          <h2 className="text-[13px] font-medium uppercase tracking-[0.08em] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-            Publish a build
-          </h2>
-          <p className="mt-2 text-[12px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-            Uploads go straight to storage from your browser, so large DMGs are
-            fine. Whatever you publish here is what the team sees.
-          </p>
-          <ReleaseUploader />
-        </div>
-      ) : null}
     </div>
   );
 }

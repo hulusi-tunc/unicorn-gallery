@@ -14,7 +14,8 @@
     "fixture:gen": "tsx scripts/gen-fixture.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
-    "tokens": "tsx scripts/show-tokens.ts"
+    "tokens": "tsx scripts/show-tokens.ts",
+    "release:publish": "tsx scripts/publish-release.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1114.0",
