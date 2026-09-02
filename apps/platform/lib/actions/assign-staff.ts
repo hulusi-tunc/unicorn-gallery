@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '@/lib/queries';
-import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase/server';
 
 interface AssignInput {
   appId: string;
@@ -29,6 +29,38 @@ export async function assignStaff(input: AssignInput): Promise<{ ok?: true; erro
     .update({ [input.field]: value })
     .eq('id', input.appId);
   if (error) return { error: error.message };
+
+  // Being named Designer / PM is what people expect to grant access to the
+  // project in Capture — but Capture reads `project_members` (see
+  // /api/projects/mine), not `designer_id` / `pm_id`. Without this upsert the
+  // assignment is invisible to the desktop app and the person "doesn't see the
+  // project", which is exactly how it behaved before.
+  //
+  // Non-fatal: the staff field is already saved, so a failure here degrades to
+  // the old behaviour rather than losing the assignment.
+  if (value) {
+    const admin = getSupabaseAdminClient();
+    const { data: assignee } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('id', value)
+      .maybeSingle();
+    // Customers have no Capture surface and are blocked by RLS from writing
+    // captures, so only agency-tier assignees become project members.
+    if (assignee?.role === 'agency') {
+      const { error: memberErr } = await admin
+        .from('project_members')
+        .upsert(
+          { app_id: input.appId, user_id: value, assigned_by: profile.id },
+          { onConflict: 'app_id,user_id', ignoreDuplicates: true },
+        );
+      if (memberErr) {
+        return {
+          error: `Saved, but granting Capture access failed: ${memberErr.message}`,
+        };
+      }
+    }
+  }
 
   revalidatePath('/');
   revalidatePath(`/app/${input.appSlug}`);

@@ -113,7 +113,21 @@ export interface UploadedFrameUrl {
 	url: string;
 }
 
-export type UploadResult =
+/** One batch that the gallery rejected, with the frames it was carrying. */
+export interface UploadFailure {
+	/** 1-based batch number, for log/UI wording. */
+	batch: number;
+	error: string;
+	/** Manifest frame ids that did not make it. */
+	frameIds: string[];
+}
+
+/**
+ * Result of a single batch POST. Deliberately narrower than `UploadResult`:
+ * partial success only exists at the session level, where some batches can
+ * land while others fail.
+ */
+export type BatchUploadResult =
 	| {
 			ok: true;
 			framesCount: number;
@@ -123,6 +137,28 @@ export type UploadResult =
 			frames: UploadedFrameUrl[];
 	  }
 	| { ok: false; error: string; skipped: UploadSkipped[] };
+
+export type UploadResult =
+	| {
+			ok: true;
+			framesCount: number;
+			buildId: string;
+			appSlug: string;
+			skipped: UploadSkipped[];
+			frames: UploadedFrameUrl[];
+			/**
+			 * Manifest frame ids the gallery accepted. Callers must mark ONLY
+			 * these as uploaded — a push can now partially succeed, and
+			 * flagging a frame that never landed would stop it retrying.
+			 */
+			uploadedFrameIds: string[];
+			/**
+			 * Batches that failed while others succeeded. Empty on a clean
+			 * push; non-empty means "partial success" and the UI should say so.
+			 */
+			failures: UploadFailure[];
+	  }
+	| { ok: false; error: string; skipped: UploadSkipped[]; failures?: UploadFailure[] };
 
 interface MultipartPart {
 	name: string;
@@ -362,13 +398,18 @@ export function sessionToPlatformManifest(
 			image: snap.image || snap.remoteImageUrl || "",
 			video: snap.video,
 			position: framePositions.get(`${snap.sessionId}#${snap.sequence}`),
-			versions:
-				snap.versions && snap.versions.length > 0
-					? snap.versions.map((v) => ({
+			// Only versions the gallery hasn't accepted yet. Re-sending the
+			// whole history on every push is what inflated single frames past
+			// the request size cap; `markUploaded` flags them once stored.
+			versions: (() => {
+				const pending = (snap.versions ?? []).filter((v) => !v.uploaded);
+				return pending.length > 0
+					? pending.map((v) => ({
 							image: v.image,
 							capturedAt: v.capturedAt,
 						}))
-					: undefined,
+					: undefined;
+			})(),
 		});
 	}
 
@@ -652,6 +693,8 @@ export async function uploadSession(
 	let lastAppSlug = "";
 	const allSkipped: UploadSkipped[] = [...preflightSkipped];
 	const allFrames: UploadedFrameUrl[] = [];
+	const uploadedFrameIds: string[] = [];
+	const failures: UploadFailure[] = [];
 	if (preflightSkipped.length > 0) {
 		opts.log?.(
 			`skipping ${preflightSkipped.length} oversized frame${preflightSkipped.length === 1 ? "" : "s"} (Vercel 4.5MB cap)`,
@@ -711,10 +754,21 @@ export async function uploadSession(
 		// missing before the batch died.
 		allSkipped.push(...result.skipped);
 		if (!result.ok) {
+			// Keep going. One oversized or rejected frame used to abort the
+			// entire push, so a single bad screen meant NO screen landed —
+			// and because batch 0 runs with ?replace=true, that could leave
+			// the project wiped down to whatever batch 0 wrote. Pushing the
+			// remaining batches salvages every frame that is actually fine;
+			// the failures are reported back so the UI can name them.
 			log(
-				`batch ${i + 1}/${batches.length} failed: ${result.error} (aborting remaining batches)`,
+				`batch ${i + 1}/${batches.length} failed: ${result.error} (continuing with remaining batches)`,
 			);
-			return { ...result, skipped: allSkipped };
+			failures.push({
+				batch: i + 1,
+				error: result.error,
+				frameIds: batch.map((it) => it.frame.id),
+			});
+			continue;
 		}
 		log(
 			`batch ${i + 1}/${batches.length} ok — ${result.framesCount} frames stored`,
@@ -723,6 +777,27 @@ export async function uploadSession(
 		lastBuildId = result.buildId;
 		lastAppSlug = result.appSlug;
 		allFrames.push(...result.frames);
+		for (const it of batch) uploadedFrameIds.push(it.frame.id);
+	}
+
+	// Every batch failed — nothing landed, so this is a plain failure and the
+	// caller should surface the first real error rather than a partial state.
+	if (uploadedFrameIds.length === 0) {
+		return {
+			ok: false,
+			error:
+				failures[0]?.error ??
+				"Upload failed: no batches were accepted by the gallery.",
+			skipped: allSkipped,
+			failures,
+		};
+	}
+
+	if (failures.length > 0) {
+		const badFrames = failures.reduce((n, f) => n + f.frameIds.length, 0);
+		log(
+			`pushed ${totalUploaded} frame(s); ${badFrames} frame(s) in ${failures.length} batch(es) failed`,
+		);
 	}
 
 	return {
@@ -732,6 +807,8 @@ export async function uploadSession(
 		appSlug: lastAppSlug,
 		skipped: allSkipped,
 		frames: allFrames,
+		uploadedFrameIds,
+		failures,
 	};
 }
 
@@ -742,7 +819,7 @@ async function uploadOne(args: {
 	manifest: PlatformManifest;
 	label: string;
 	log: (m: string) => void;
-}): Promise<UploadResult> {
+}): Promise<BatchUploadResult> {
 	const { url, token, outDir, manifest, label, log } = args;
 
 	// Pre-read every screenshot file. Frames whose PNG is missing on disk

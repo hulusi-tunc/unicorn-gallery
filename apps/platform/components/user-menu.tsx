@@ -1,6 +1,14 @@
 'use client';
 
-import { Archive, ClipboardCheck, LogOut, Settings, Shield, User as UserIcon } from 'lucide-react';
+import {
+  Archive,
+  ClipboardCheck,
+  Download,
+  LogOut,
+  Settings,
+  Shield,
+  User as UserIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -103,6 +111,12 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
           <Link href="/profile#settings">
             <Settings size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
             Settings
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/downloads">
+            <Download size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
+            Download apps
           </Link>
         </DropdownMenuItem>
 

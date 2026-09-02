@@ -30,7 +30,7 @@ import {
 } from '@/lib/tokens';
 
 export default function DesignSystemPage(): ReactNode {
-  const { theme, setTheme } = useTheme();
+  const { theme, toggle } = useTheme();
   const t = getNd(theme);
   const sh = getShadow(theme);
 
@@ -58,7 +58,7 @@ export default function DesignSystemPage(): ReactNode {
         </div>
         <button
           type="button"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onClick={toggle}
           style={{
             padding: '8px 16px',
             borderRadius: 8,

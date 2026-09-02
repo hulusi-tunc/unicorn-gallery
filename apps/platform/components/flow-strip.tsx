@@ -159,13 +159,13 @@ function FlowStripCard({
     <Link
       href={href}
       className="shrink-0"
-      style={{ width: 'calc(33.333% - 9px)', minWidth: 240 }}
+      style={{ width: 'calc(25% - 9px)', minWidth: 180, maxWidth: 300 }}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
       <div
         className="relative overflow-hidden rounded-xl bg-[oklch(0.96_0.004_260)] transition-all duration-200 hover:scale-[1.01] dark:bg-[oklch(0.19_0.007_260)]"
-        style={{ aspectRatio: isMobile ? '3 / 4' : '16 / 10' }}
+        style={{ aspectRatio: isMobile ? '11 / 20' : '16 / 10' }}
       >
         {/* Unresolved comment badge */}
         {unresolved && unresolved.count > 0 ? (
@@ -181,7 +181,7 @@ function FlowStripCard({
             <DeviceBezel
               src={src}
               alt={name}
-              style={{ height: '80%' }}
+              style={{ height: '94%' }}
             />
           </div>
         ) : (

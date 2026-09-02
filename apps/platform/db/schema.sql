@@ -296,6 +296,10 @@ create table if not exists public.comments (
   resolved_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now()
 );
+alter table public.comments add column if not exists pin_x real;
+alter table public.comments add column if not exists pin_y real;
+alter table public.comments add column if not exists pin_w real;
+alter table public.comments add column if not exists pin_h real;
 create index if not exists comments_frame_idx on public.comments(frame_id, created_at);
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -696,4 +700,42 @@ create index if not exists dor_assessments_app_idx on public.dor_assessments(app
 alter table public.dor_assessments enable row level security;
 drop policy if exists dor_assessments_agency_all on public.dor_assessments;
 create policy dor_assessments_agency_all on public.dor_assessments for all
+  using (public.is_agency()) with check (public.is_agency());
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- App releases — the Capture desktop build + Chrome extension that the team
+-- downloads. Bytes live in R2 (uploaded straight from the browser via a
+-- presigned PUT, because a DMG is far past Vercel's request body cap); this
+-- table only holds the metadata and the resulting public URL.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.app_releases (
+  id uuid primary key default gen_random_uuid(),
+  -- Which artifact this is. Kept as a checked text column rather than an enum
+  -- so adding a Windows/Linux build later is a one-line migration.
+  kind text not null check (kind in ('macos-desktop', 'chrome-extension')),
+  channel text not null default 'stable' check (channel in ('stable', 'canary')),
+  version text not null,
+  file_url text not null,
+  file_name text not null,
+  size_bytes bigint,
+  notes text,
+  uploaded_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table public.app_releases add column if not exists channel text not null default 'stable';
+alter table public.app_releases add column if not exists notes text;
+alter table public.app_releases add column if not exists size_bytes bigint;
+-- "Latest per kind+channel" is the only read pattern the download page has.
+create index if not exists app_releases_kind_idx
+  on public.app_releases(kind, channel, created_at desc);
+
+-- Everyone signed in may read (customers get the extension too); only agency
+-- members publish. Reads/writes go through the service-role client, which
+-- bypasses RLS — these policies are the backstop for direct client access.
+alter table public.app_releases enable row level security;
+drop policy if exists app_releases_read_all on public.app_releases;
+create policy app_releases_read_all on public.app_releases for select
+  using (auth.uid() is not null);
+drop policy if exists app_releases_agency_write on public.app_releases;
+create policy app_releases_agency_write on public.app_releases for all
   using (public.is_agency()) with check (public.is_agency());

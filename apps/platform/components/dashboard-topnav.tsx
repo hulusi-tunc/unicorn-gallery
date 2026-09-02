@@ -63,7 +63,6 @@ export function DashboardTopNav({
 
   const navInnerStyle: CSSProperties = {
     width: '100%',
-    width: '100%',
     maxWidth: 1600,
     padding: '0 24px',
     display: 'flex',

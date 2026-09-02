@@ -151,6 +151,12 @@ async function finishSession(
 		console.log(
 			`\x1b[32m✓\x1b[0m uploaded to ${result.appSlug || "platform"} — ${result.framesCount} frame(s), build ${result.buildId.slice(0, 8)}`,
 		);
+		// A push can land partially now, so a bare ✓ would overstate it.
+		for (const f of result.failures) {
+			console.log(
+				`\x1b[33m!\x1b[0m ${f.frameIds.length} frame(s) rejected: ${f.error}`,
+			);
+		}
 	} else {
 		console.log(`\x1b[31m✗\x1b[0m upload failed: ${result.error}`);
 		console.log(

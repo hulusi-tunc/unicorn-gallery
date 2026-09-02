@@ -642,7 +642,13 @@ async function runSnapFlowsScanForProject(
 export interface PushSkipped {
 	projectId: string;
 	image: string;
-	reason: "missing-file" | "read-error";
+	/**
+	 * Why the frame never left the machine. `too-large` is the one the push
+	 * summary calls out specially — it comes with `bytes` so the modal can
+	 * show the actual size next to the 4.5 MB limit.
+	 */
+	reason: "missing-file" | "read-error" | "too-large";
+	bytes?: number;
 }
 
 async function pushAll(
@@ -732,27 +738,65 @@ async function pushAll(
 		// Tag each skipped image with its project so the summary modal
 		// can group by project when the user has multiple onboarded.
 		for (const s of result.skipped) {
-			skipped.push({ projectId, image: s.image, reason: s.reason });
+			// Carry `bytes` through — the summary modal renders the size
+			// beside `too-large` entries and silently omitted it before.
+			skipped.push({
+				projectId,
+				image: s.image,
+				reason: s.reason,
+				...(s.bytes === undefined ? {} : { bytes: s.bytes }),
+			});
 		}
 		const now = new Date().toISOString();
 		if (result.ok) {
-			synced += snaps.length;
+			// A push can now land partially: `uploadedFrameIds` is the set the
+			// gallery actually accepted. Marking a frame that never arrived
+			// would retire it from `listPendingUploads` and it would silently
+			// never retry — so each snap is resolved individually here.
+			const okIds = new Set(result.uploadedFrameIds);
+			const errByFrameId = new Map<string, string>();
+			for (const f of result.failures) {
+				for (const id of f.frameIds) errByFrameId.set(id, f.error);
+			}
 			// Map gallery-returned `frameId → url` so we can hand each snap
-			// its own `remoteImageUrl`. The lookup is by frameIdFromSnap
-			// to match the same id the upload manifest used.
+			// its own `remoteImageUrl`.
 			const urlByFrameId = new Map<string, string>();
 			for (const f of result.frames) urlByFrameId.set(f.frameId, f.url);
 			for (const s of snaps) {
-				const remoteImageUrl = urlByFrameId.get(frameIdFromSnap(s));
-				await orch.markUploaded(
-					s.sessionId,
-					s.sequence,
-					{
-						ok: true,
-						buildId: result.buildId,
+				// Gallery-synced snaps ride under their original gallery frame
+				// id; everything else under the generated one. Check both so
+				// the lookup matches whichever the manifest used.
+				const genId = frameIdFromSnap(s);
+				const fid = s.gallerySyncRef ?? genId;
+				if (okIds.has(fid) || okIds.has(genId)) {
+					synced += 1;
+					const remoteImageUrl =
+						urlByFrameId.get(fid) ?? urlByFrameId.get(genId);
+					await orch.markUploaded(
+						s.sessionId,
+						s.sequence,
+						{
+							ok: true,
+							buildId: result.buildId,
+							uploadedAt: now,
+						},
+						remoteImageUrl ? { remoteImageUrl } : undefined,
+					);
+				} else {
+					failed += 1;
+					await orch.markUploaded(s.sessionId, s.sequence, {
+						ok: false,
+						error:
+							errByFrameId.get(fid) ??
+							errByFrameId.get(genId) ??
+							"Frame was not accepted by the gallery.",
 						uploadedAt: now,
-					},
-					remoteImageUrl ? { remoteImageUrl } : undefined,
+					});
+				}
+			}
+			for (const f of result.failures) {
+				errors.push(
+					`Project ${projectId}: ${f.frameIds.length} screen(s) failed — ${f.error}`,
 				);
 			}
 		} else {

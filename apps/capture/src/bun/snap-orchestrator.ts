@@ -97,7 +97,21 @@ export interface SnapVersion {
 	image: string;
 	capturedAt: string;
 	navStack?: string[];
+	/**
+	 * True once this version's bytes have been accepted by the gallery.
+	 * Already-pushed versions are omitted from later upload manifests so a
+	 * re-push only carries what actually changed — without this every push
+	 * re-sent the slot's entire history.
+	 */
+	uploaded?: boolean;
 }
+
+/**
+ * How many past captures to keep per screen slot. Auto-update re-snaps the
+ * same slot on every file change, so this is the difference between a
+ * bounded history and a manifest that grows until pushes stop fitting.
+ */
+export const MAX_SNAP_VERSIONS = 5;
 
 export interface SnapRecord {
 	projectId: string;
@@ -1298,6 +1312,19 @@ export async function createSnapOrchestrator(
 				capturedAt: existing.capturedAt,
 				navStack: existing.navStack,
 			});
+			// Retain only the most recent MAX_SNAP_VERSIONS. Auto-update
+			// re-snaps the same slot on every file change, so an uncapped
+			// history grows without bound: the PNGs pile up on disk AND ride
+			// along in every push payload, which is what pushed single frames
+			// past the upload size cap. Trim here (not at push time) so the
+			// disk reclaim happens too.
+			const dropped = versions.splice(MAX_SNAP_VERSIONS);
+			for (const d of dropped) {
+				// Never unlink a file another manifest entry still points at.
+				if (d.image === existing.image || d.image === imageRel) continue;
+				if (versions.some((v) => v.image === d.image)) continue;
+				await unlink(join(outDir, d.image)).catch(() => {});
+			}
 			existing.versions = versions;
 			existing.image = imageRel;
 			existing.capturedAt = capturedAt;
@@ -1759,6 +1786,12 @@ export async function createSnapOrchestrator(
 			const rec = s.snaps.find((r) => r.sequence === seq);
 			if (rec) {
 				rec.uploaded = info;
+				if (info.ok) {
+					// The push that carried this snap carried its versions in
+					// the same manifest, so they're durable now. Marking them
+					// keeps the next push from re-sending the same bytes.
+					for (const v of rec.versions ?? []) v.uploaded = true;
+				}
 				if (info.ok && opts?.remoteImageUrl) {
 					rec.remoteImageUrl = opts.remoteImageUrl;
 					// 7-day grace window: covers the typical "did the push
