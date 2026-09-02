@@ -214,11 +214,16 @@ export function DashboardTopNav({
               aria-hidden
               style={{
                 position: 'absolute',
-                top: 6,
-                right: 6,
-                minWidth: 16,
-                height: 16,
-                padding: '0 4px',
+                // Anchor to the bell's top-right and hang off the corner. The
+                // badge used to sit at top/right 6 with a 2px border, making it
+                // 20px against a 16px icon — a two-digit count covered the bell
+                // completely.
+                top: 4,
+                right: 4,
+                transform: 'translate(40%, -40%)',
+                minWidth: 14,
+                height: 14,
+                padding: '0 3px',
                 borderRadius: 999,
                 background: t.accent,
                 color: 'white',
@@ -229,8 +234,11 @@ export function DashboardTopNav({
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: `2px solid ${t.black}`,
+                // Ring instead of a border so the cutout doesn't inflate the
+                // badge's box and eat the icon.
+                boxShadow: `0 0 0 2px ${t.black}`,
                 lineHeight: 1,
+                pointerEvents: 'none',
               }}
             >
               {unreadCount > 99 ? '99+' : unreadCount}

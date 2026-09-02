@@ -13,6 +13,7 @@ const CommentsPanel = dynamic(
 );
 import { DeviceBezel } from '@/components/device-bezel';
 import { Filmstrip } from '@/components/filmstrip';
+import { MarkFrameRead } from '@/components/mark-frame-read';
 import { PinOverlay, PinPopover, type PinDraft } from '@/components/pin-overlay';
 import type { CommentWithAuthor } from '@/lib/comments';
 import { postComment } from '@/lib/actions/comments';
@@ -150,6 +151,14 @@ export function FrameModal({
 
   return (
     <>
+    {/*
+      Clear this frame's unread notifications on open. Mounted here rather than
+      in the route pages because BOTH the intercepted modal route and the
+      hard-navigation fallback render this component — a previous refactor
+      dropped it from the page and nothing marked notifications seen after that,
+      so the bell only ever counted up.
+    */}
+    <MarkFrameRead frameRowId={frameRowId} appSlug={appSlug} />
     {/* Prefetch adjacent frame images so arrow navigation feels instant */}
     {prev ? <link rel="prefetch" href={imageHref(prev.image)} as="image" /> : null}
     {next ? <link rel="prefetch" href={imageHref(next.image)} as="image" /> : null}
