@@ -12,5 +12,11 @@ export default async function AdminPage(): Promise<ReactNode> {
 
   const profiles = await listAllProfiles();
 
-  return <UsersTable profiles={profiles} currentUserId={profile.id} />;
+  return (
+    <UsersTable
+      profiles={profiles}
+      currentUserId={profile.id}
+      currentUserEmail={profile.email}
+    />
+  );
 }
