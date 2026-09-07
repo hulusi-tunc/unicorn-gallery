@@ -12,7 +12,6 @@ const CommentsPanel = dynamic(
   { ssr: false, loading: () => <div className="flex-1 animate-pulse rounded-2xl bg-white/5" /> },
 );
 import { DeviceBezel } from '@/components/device-bezel';
-import { Filmstrip } from '@/components/filmstrip';
 import { MarkFrameRead } from '@/components/mark-frame-read';
 import { PinOverlay, PinPopover, type PinDraft } from '@/components/pin-overlay';
 import type { CommentWithAuthor } from '@/lib/comments';
@@ -175,7 +174,7 @@ export function FrameModal({
         onClick={(e) => e.stopPropagation()}
         className="flex w-full h-[80vh] max-w-[1800px] gap-3"
       >
-        {/* Left box: preview + header + filmstrip */}
+        {/* Left box: header + preview */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl">
           {/* Header bar */}
           <div className="flex shrink-0 items-center gap-4 border-b border-white/5 px-5 py-3">
@@ -222,7 +221,11 @@ export function FrameModal({
           {/* Image area */}
           <div className="relative flex min-h-0 flex-1 flex-col">
             <div className="flex-1 overflow-y-auto overflow-x-hidden bg-[oklch(0.195_0.008_260)]">
-              <div className="flex min-h-full items-center justify-center px-16 py-8">
+              <div
+                className={`flex items-center justify-center px-16 py-8 ${
+                  isMobile && !videoSrc ? 'h-full' : 'min-h-full'
+                }`}
+              >
                 {videoSrc ? (
                   <div className="w-full max-w-[1100px] overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
                     <video
@@ -243,7 +246,7 @@ export function FrameModal({
                     alt={frameName}
                     scrollable
                     style={{
-                      height: 'min(75vh, calc(100vh - 260px))',
+                      height: '100%',
                       filter: 'drop-shadow(0 20px 50px rgba(0,0,0,0.4))',
                     }}
                   />
@@ -299,15 +302,6 @@ export function FrameModal({
               </Link>
             ) : null}
 
-            {/* Filmstrip */}
-            <Filmstrip
-              flow={flow}
-              platform={platform}
-              appSlug={appSlug}
-              activeFrameId={activeFrameId}
-              versionQuery={versionQuery}
-              replace
-            />
           </div>
         </div>
 
