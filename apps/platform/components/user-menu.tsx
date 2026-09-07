@@ -94,7 +94,7 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
             style={{ background: t.accentSubtle, color: t.accent }}
           >
             {isAgency ? 'UNICORN' : 'CUSTOMER'}
-            {profile.flavor ? ` · ${profile.flavor.toUpperCase()}` : ''}
+            {isAgency && profile.flavor ? ` · ${profile.flavor.toUpperCase()}` : ''}
           </span>
         </div>
 
