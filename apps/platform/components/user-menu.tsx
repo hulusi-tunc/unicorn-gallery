@@ -113,12 +113,6 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
             Settings
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/downloads">
-            <Download size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
-            Download apps
-          </Link>
-        </DropdownMenuItem>
 
         {isAgency ? (
           <>
@@ -140,6 +134,12 @@ export function UserMenu({ profile }: { profile: Profile }): ReactNode {
               <Link href="/archived">
                 <Archive size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
                 Archived projects
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/downloads">
+                <Download size={14} className="mr-2 text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]" />
+                Download apps
               </Link>
             </DropdownMenuItem>
           </>
