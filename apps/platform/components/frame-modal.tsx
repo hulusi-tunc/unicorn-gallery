@@ -257,9 +257,10 @@ export function FrameModal({
             }
             mode={isMobile && !videoSrc ? 'height' : 'width'}
             resetKey={activeFrameId}
-            /* Left-drag places a comment pin on web captures, so those pan with
-               middle-drag / space+drag instead. Bezels have no pin layer. */
-            dragToPan={isMobile && !videoSrc}
+            /* Left-drag places a comment pin, so panning is middle-drag or
+               space+drag. Read-only viewers place no pins, so they keep
+               left-drag panning. */
+            dragToPan={isMobile && !videoSrc && readOnly}
             maxWidth={1100}
           >
                 {videoSrc ? (
@@ -285,6 +286,36 @@ export function FrameModal({
                       height: '100%',
                       filter: 'drop-shadow(0 20px 50px rgba(0,0,0,0.4))',
                     }}
+                    /* Pin comments on phone frames too: click a point or drag
+                       a region, exactly as on web captures. The overlay wraps
+                       the screenshot inside the screen cutout, so coordinates
+                       normalise against the image — not the bezel — and
+                       markers scroll with a long capture. */
+                    screenWrapper={(screen) => (
+                      <div ref={pinContainerRef} style={{ position: 'relative' }}>
+                        <PinOverlay
+                          comments={comments}
+                          activeCommentId={activeCommentId}
+                          onPinPlace={handlePinPlace}
+                          onPinClick={handlePinClick}
+                          readOnly={readOnly}
+                        >
+                          {screen}
+                        </PinOverlay>
+                        {pendingPin && (
+                          <PinPopover
+                            pin={pendingPin}
+                            containerRef={pinContainerRef}
+                            onSubmit={handlePinSubmit}
+                            onCancel={handlePinCancel}
+                            mentionables={mentionables}
+                            /* The screen cutout clips overflow, and a 260px
+                               popover doesn't fit a ~360px screen. */
+                            floating
+                          />
+                        )}
+                      </div>
+                    )}
                   />
                 ) : (
                   <div className="w-full" ref={pinContainerRef}>
