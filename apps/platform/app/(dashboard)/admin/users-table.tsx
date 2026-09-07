@@ -319,7 +319,7 @@ function Row({
               {display}
             </span>
             {isFounder ? <Tag t={t} tone="accent">Founder</Tag> : null}
-            {profile.flavor ? <Tag t={t}>{profile.flavor}</Tag> : null}
+            {profile.role === 'agency' && profile.flavor ? <Tag t={t}>{profile.flavor}</Tag> : null}
             {isMe ? <Tag t={t}>You</Tag> : null}
           </div>
           <p
@@ -468,7 +468,8 @@ function EditForm({
     password.length > 0 ||
     name.trim() !== (profile.name ?? '').trim() ||
     role !== profile.role ||
-    flavor !== (profile.flavor === 'non-designer' ? 'non-designer' : 'designer');
+    (role === 'agency' &&
+      flavor !== (profile.flavor === 'non-designer' ? 'non-designer' : 'designer'));
 
   function onSubmit(e: FormEvent): void {
     e.preventDefault();
@@ -552,17 +553,19 @@ function EditForm({
         </Field>
       </div>
 
-      <Field label="LABEL" t={t}>
-        <Segmented
-          value={flavor}
-          onChange={setFlavor}
-          options={[
-            { value: 'designer', label: 'Designer' },
-            { value: 'non-designer', label: 'Non-designer (PM, ops)' },
-          ]}
-          t={t}
-        />
-      </Field>
+      {role === 'agency' ? (
+        <Field label="LABEL" t={t}>
+          <Segmented
+            value={flavor}
+            onChange={setFlavor}
+            options={[
+              { value: 'designer', label: 'Designer' },
+              { value: 'non-designer', label: 'Non-designer (PM, ops)' },
+            ]}
+            t={t}
+          />
+        </Field>
+      ) : null}
 
       {!canEditCredentials ? (
         <p style={{ fontSize: 12, color: t.textSecondary }}>
@@ -698,17 +701,19 @@ function CreateForm({ onClose, t }: { onClose: () => void; t: Tokens }): ReactNo
           </Field>
         </div>
 
-        <Field label="LABEL" t={t}>
-          <Segmented
-            value={flavor}
-            onChange={setFlavor}
-            options={[
-              { value: 'designer', label: 'Designer' },
-              { value: 'non-designer', label: 'Non-designer (PM, ops)' },
-            ]}
-            t={t}
-          />
-        </Field>
+        {role === 'agency' ? (
+          <Field label="LABEL" t={t}>
+            <Segmented
+              value={flavor}
+              onChange={setFlavor}
+              options={[
+                { value: 'designer', label: 'Designer' },
+                { value: 'non-designer', label: 'Non-designer (PM, ops)' },
+              ]}
+              t={t}
+            />
+          </Field>
+        ) : null}
 
         {role === 'customer' ? (
           <p style={{ fontSize: 12, color: t.textSecondary }}>

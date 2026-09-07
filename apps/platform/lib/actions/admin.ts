@@ -73,7 +73,12 @@ export async function setRole(input: {
   const admin = getSupabaseAdminClient();
   const { error } = await admin
     .from('profiles')
-    .update({ role: input.role })
+    .update(
+      input.role === 'agency'
+        ? { role: input.role }
+        : // A customer carries no designer / non-designer label.
+          { role: input.role, flavor: null },
+    )
     .eq('id', input.profileId);
   if (error) return { error: error.message };
 
@@ -123,7 +128,10 @@ export async function createAccount(
   const email = input.email.trim().toLowerCase();
   const name = input.name?.trim() || null;
   const role: Role = input.role === 'agency' ? 'agency' : 'customer';
-  const flavor = input.flavor === 'non-designer' ? 'non-designer' : 'designer';
+  // designer / non-designer describes how a Unicorn works. It means nothing
+  // for a customer, so don't store one.
+  const flavor =
+    role === 'agency' ? (input.flavor === 'non-designer' ? 'non-designer' : 'designer') : null;
 
   if (!EMAIL_RE.test(email)) return { error: 'Valid email is required.' };
   if (input.password.length < MIN_PASSWORD) {
@@ -257,7 +265,13 @@ export async function updateAccount(
   if (nextEmail) patch['email'] = nextEmail;
   if (input.name !== undefined) patch['name'] = input.name.trim() || null;
   if (input.role) patch['role'] = input.role;
-  if (input.flavor) patch['flavor'] = input.flavor;
+  const effectiveRole = input.role ?? target.role;
+  if (effectiveRole !== 'agency') {
+    // Demoting to customer drops the label too, so it can't resurface later.
+    patch['flavor'] = null;
+  } else if (input.flavor) {
+    patch['flavor'] = input.flavor;
+  }
 
   if (Object.keys(patch).length > 0) {
     const { error: profErr } = await admin
