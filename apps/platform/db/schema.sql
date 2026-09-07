@@ -569,11 +569,18 @@ drop policy if exists notifications_self_update on public.notifications;
 create policy notifications_self_update on public.notifications for update
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
--- Trigger: when a comment lands, fan out notification rows to every
--- agency user + every customer linked to the comment's app. Skip the
--- comment's author (no self-pings). Mentions are layered on top in
--- application code (server action also inserts 'mention' rows for
--- explicit @mentions parsed from the body).
+-- Trigger: when a comment lands, notify the people actually attached to that
+-- project — its designer, its PM, any agency member assigned to it via
+-- project_members, and its customers. Plus the parent comment's author on a
+-- reply. Skip the comment's author (no self-pings).
+--
+-- This used to notify EVERY agency user for EVERY comment on EVERY project,
+-- which buried the bell in other teams' work: 74 comments had produced 909
+-- notification rows, ~70 unseen for every Unicorn regardless of involvement.
+--
+-- Explicit @mentions are layered on top in application code (postComment
+-- inserts 'mention' rows), so mentioning someone still reaches them even if
+-- they aren't on the project.
 create or replace function public.fanout_comment_notifications()
 returns trigger
 language plpgsql
@@ -599,25 +606,50 @@ begin
     end if;
   end if;
 
-  -- Generic 'comment' notification to every agency user (excluding author + parent author).
+  -- Everyone attached to THIS project, de-duplicated: its designer, its PM,
+  -- any agency member assigned to it, and its customers.
   insert into public.notifications (user_id, kind, comment_id, frame_id, app_id, actor_id)
-  select p.id, 'comment', new.id, new.frame_id, v_app_id, new.author_id
-    from public.profiles p
-    where p.role = 'agency'
-      and p.id <> new.author_id
-      and (v_parent_author is null or p.id <> v_parent_author);
-
-  -- And every customer linked to this app (excluding author + parent author).
-  insert into public.notifications (user_id, kind, comment_id, frame_id, app_id, actor_id)
-  select ac.user_id, 'comment', new.id, new.frame_id, v_app_id, new.author_id
-    from public.app_customers ac
-    where ac.app_id = v_app_id
-      and ac.user_id <> new.author_id
-      and (v_parent_author is null or ac.user_id <> v_parent_author);
+  select distinct r.user_id, 'comment'::public.notification_kind, new.id, new.frame_id, v_app_id, new.author_id
+    from (
+      select a.designer_id as user_id
+        from public.apps a
+       where a.id = v_app_id and a.designer_id is not null
+      union
+      select a.pm_id
+        from public.apps a
+       where a.id = v_app_id and a.pm_id is not null
+      union
+      select pm.user_id
+        from public.project_members pm
+       where pm.app_id = v_app_id
+      union
+      select ac.user_id
+        from public.app_customers ac
+       where ac.app_id = v_app_id
+    ) r
+   where r.user_id <> new.author_id
+     and (v_parent_author is null or r.user_id <> v_parent_author);
 
   return new;
 end;
 $$;
+
+-- Unread notification counts per app for one user, aggregated in the
+-- database. security invoker so the notifications RLS policy still applies.
+create or replace function public.get_unread_notification_counts(p_user_id uuid)
+returns table (app_id uuid, unread bigint)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select n.app_id, count(*)::bigint
+    from public.notifications n
+   where n.user_id = p_user_id
+     and n.seen_at is null
+   group by n.app_id;
+$$;
+grant execute on function public.get_unread_notification_counts(uuid) to authenticated;
 
 drop trigger if exists comments_fanout on public.comments;
 create trigger comments_fanout
