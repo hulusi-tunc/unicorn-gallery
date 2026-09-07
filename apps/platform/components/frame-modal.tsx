@@ -12,6 +12,7 @@ const CommentsPanel = dynamic(
   { ssr: false, loading: () => <div className="flex-1 animate-pulse rounded-2xl bg-white/5" /> },
 );
 import { DeviceBezel } from '@/components/device-bezel';
+import { ZoomStage } from '@/components/zoom-stage';
 import { MarkFrameRead } from '@/components/mark-frame-read';
 import { PinOverlay, PinPopover, type PinDraft } from '@/components/pin-overlay';
 import type { CommentWithAuthor } from '@/lib/comments';
@@ -219,15 +220,50 @@ export function FrameModal({
           </div>
 
           {/* Image area */}
-          <div className="relative flex min-h-0 flex-1 flex-col">
-            <div className="flex-1 overflow-y-auto overflow-x-hidden bg-[oklch(0.195_0.008_260)]">
-              <div
-                className={`flex items-center justify-center px-16 py-8 ${
-                  isMobile && !videoSrc ? 'h-full' : 'min-h-full'
-                }`}
-              >
+          <ZoomStage
+            overlay={
+              <>
+              {prev ? (
+                <Link
+                  href={frameHref(prev.id)}
+                  scroll={false}
+                  replace
+                  onClick={(e) => {
+                    e.preventDefault();
+                    router.replace(frameHref(prev.id), { scroll: false });
+                  }}
+                  aria-label={`Previous: ${prev.name}`}
+                  className="absolute left-4 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[oklch(0.3_0.008_260)] text-white shadow-xl transition-transform hover:scale-105"
+                >
+                  <ArrowLeft size={20} strokeWidth={2.5} />
+                </Link>
+              ) : null}
+              {next ? (
+                <Link
+                  href={frameHref(next.id)}
+                  scroll={false}
+                  replace
+                  onClick={(e) => {
+                    e.preventDefault();
+                    router.replace(frameHref(next.id), { scroll: false });
+                  }}
+                  aria-label={`Next: ${next.name}`}
+                  className="absolute right-4 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[oklch(0.3_0.008_260)] text-white shadow-xl transition-transform hover:scale-105"
+                >
+                  <ArrowRight size={20} strokeWidth={2.5} />
+                </Link>
+              ) : null}
+              </>
+            }
+            mode={isMobile && !videoSrc ? 'height' : 'width'}
+            resetKey={activeFrameId}
+            /* Left-drag places a comment pin on web captures, so those pan with
+               middle-drag / space+drag instead. Bezels have no pin layer. */
+            dragToPan={isMobile && !videoSrc}
+            maxWidth={1100}
+          >
                 {videoSrc ? (
-                  <div className="w-full max-w-[1100px] overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
+                  <div className="overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
                     <video
                       src={videoSrc}
                       poster={src}
@@ -251,7 +287,7 @@ export function FrameModal({
                     }}
                   />
                 ) : (
-                  <div className="w-full max-w-[1100px]" ref={pinContainerRef}>
+                  <div className="w-full" ref={pinContainerRef}>
                     <PinOverlay
                       comments={comments}
                       activeCommentId={activeCommentId}
@@ -275,34 +311,7 @@ export function FrameModal({
                     </PinOverlay>
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Prev/Next arrows */}
-            {prev ? (
-              <Link
-                href={frameHref(prev.id)}
-                scroll={false}
-                replace
-                aria-label={`Previous: ${prev.name}`}
-                className="absolute left-4 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[oklch(0.3_0.008_260)] text-white shadow-xl transition-transform hover:scale-105"
-              >
-                <ArrowLeft size={20} strokeWidth={2.5} />
-              </Link>
-            ) : null}
-            {next ? (
-              <Link
-                href={frameHref(next.id)}
-                scroll={false}
-                replace
-                aria-label={`Next: ${next.name}`}
-                className="absolute right-4 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[oklch(0.3_0.008_260)] text-white shadow-xl transition-transform hover:scale-105"
-              >
-                <ArrowRight size={20} strokeWidth={2.5} />
-              </Link>
-            ) : null}
-
-          </div>
+          </ZoomStage>
         </div>
 
         {/* Right box: Comments - separate rounded box */}
