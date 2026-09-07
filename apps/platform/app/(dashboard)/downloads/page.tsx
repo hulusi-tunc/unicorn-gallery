@@ -91,6 +91,9 @@ function ReleaseCard({
 export default async function DownloadsPage(): Promise<ReactNode> {
   const profile = await getCurrentProfile();
   if (!profile) redirect('/sign-in');
+  // Capture is internal tooling — customers have no business here, and the
+  // hidden menu item alone wouldn't stop them typing the URL.
+  if (profile.role !== 'agency') redirect('/apps');
 
   const releases = await getLatestReleases();
   // Stable is what the team should get by default.
