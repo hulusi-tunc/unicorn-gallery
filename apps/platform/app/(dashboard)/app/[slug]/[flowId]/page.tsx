@@ -36,7 +36,7 @@ export default async function FlowPage({
   const versionQuery = selectedBuild ? `?v=${selectedBuild.version ?? ''}` : '';
 
   return (
-    <main className="flex flex-1 flex-col bg-white pl-8 pt-8 text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
+    <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden bg-white pt-6 text-[oklch(0.24_0.01_260)] md:pl-8 md:pt-8 dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)]">
       {/* Flow header */}
       <div className="mb-6">
         <h1 className="text-xl font-semibold tracking-tight text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]">
