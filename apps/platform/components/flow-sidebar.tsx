@@ -110,10 +110,19 @@ export function FlowSidebar({
 
   return (
     <aside
+      /*
+       * Hidden below md: a fixed 240px rail plus the row's padding left only
+       * ~87px of a 375px screen for the frames themselves. Every flow is
+       * already listed down the landing page, and the page carries its own
+       * Screens/Flows tabs, so nothing becomes unreachable without it.
+       *
+       * `display` has to come from the class, not the inline style, or the
+       * inline value would win over `hidden`.
+       */
+      className="hidden md:flex"
       style={{
         width,
         flexShrink: 0,
-        display: 'flex',
         flexDirection: 'column',
         background: t.black,
         fontFamily: editorialFonts.body,

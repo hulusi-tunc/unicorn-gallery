@@ -97,38 +97,45 @@ export default async function AppOverviewPage({
   const totalFlows = manifest.flows.filter((f) => f.frames.length > 0).length;
 
   return (
-    <main className={`relative flex min-w-0 flex-1 flex-col overflow-x-hidden bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)] ${activeTab === 'flows' ? 'pl-6' : ''}`}>
+    <main className={`relative flex min-w-0 flex-1 flex-col overflow-x-hidden bg-white text-[oklch(0.24_0.01_260)] dark:bg-[oklch(0.145_0.006_260)] dark:text-[oklch(0.82_0.012_260)] ${activeTab === 'flows' ? 'md:pl-6' : ''}`}>
       <HashScroller />
 
-      {/* Tab bar - only visible when NO sidebar (Screens tab) */}
-      {activeTab === 'screens' ? (
-        <div className="flex items-center gap-6 px-2 pb-4 pt-6">
-          <nav className="flex items-center gap-5">
-            {(['screens', 'flows'] as const).map((tab) => {
-              const isActive = tab === activeTab;
-              return (
-                <a
-                  key={tab}
-                  href={tabHref(tab)}
-                  className={`relative pb-2 text-sm ${
-                    isActive
-                      ? 'font-semibold text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]'
-                      : 'font-normal text-[oklch(0.45_0.01_260)] dark:text-[oklch(0.52_0.01_260)]'
-                  }`}
-                >
-                  {tab === 'screens' ? 'Screens' : 'Flows'}
-                  {isActive ? (
-                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[oklch(0.15_0.008_260)] dark:bg-[oklch(0.97_0.005_260)]" />
-                  ) : null}
-                </a>
-              );
-            })}
-          </nav>
-          <span className="ml-auto text-[13px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-            Showing {totalFrames} screen{totalFrames === 1 ? '' : 's'}
-          </span>
-        </div>
-      ) : null}
+      {/*
+        Tab bar. Always shown on Screens, which has no sidebar at any width.
+        On Flows it appears only below md, where the sidebar — the usual home
+        for these tabs — is hidden; otherwise you could reach Flows on a phone
+        and have no way back to Screens.
+      */}
+      <div
+        className={`flex items-center gap-6 px-2 pb-4 pt-6 ${
+          activeTab === 'screens' ? '' : 'md:hidden'
+        }`}
+      >
+        <nav className="flex items-center gap-5">
+          {(['screens', 'flows'] as const).map((tab) => {
+            const isActive = tab === activeTab;
+            return (
+              <a
+                key={tab}
+                href={tabHref(tab)}
+                className={`relative pb-2 text-sm ${
+                  isActive
+                    ? 'font-semibold text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]'
+                    : 'font-normal text-[oklch(0.45_0.01_260)] dark:text-[oklch(0.52_0.01_260)]'
+                }`}
+              >
+                {tab === 'screens' ? 'Screens' : 'Flows'}
+                {isActive ? (
+                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[oklch(0.15_0.008_260)] dark:bg-[oklch(0.97_0.005_260)]" />
+                ) : null}
+              </a>
+            );
+          })}
+        </nav>
+        <span className="ml-auto text-[13px] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
+          Showing {totalFrames} screen{totalFrames === 1 ? '' : 's'}
+        </span>
+      </div>
 
       {activeTab === 'screens' ? (
         <ScreensGrid
@@ -209,7 +216,7 @@ function FlowSection({
 
       {/* Sub-flows - indented under the parent */}
       {node.children.length > 0 ? (
-        <div className={`${isContainer ? '' : 'mt-16'} ml-6 flex flex-col gap-14 border-l-2 border-[oklch(0.92_0.005_260)] pl-6 dark:border-[oklch(0.24_0.008_260)]`}>
+        <div className={`${isContainer ? '' : 'mt-16'} ml-2 flex min-w-0 flex-col gap-14 border-l-2 border-[oklch(0.92_0.005_260)] pl-3 md:ml-6 md:pl-6 dark:border-[oklch(0.24_0.008_260)]`}>
           {node.children.map((child) => (
             <FlowSection
               key={child.flow.id}

@@ -173,46 +173,46 @@ export function FrameModal({
       {/* Two-box layout: preview + comments side by side with gap */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex w-full h-[80vh] max-w-[1800px] gap-3"
+        className="flex h-[90vh] w-full max-w-[1800px] flex-col gap-3 md:h-[80vh] md:flex-row"
       >
         {/* Left box: header + preview */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl">
           {/* Header bar */}
-          <div className="flex shrink-0 items-center gap-4 border-b border-white/5 px-5 py-3">
-            <div className="flex items-center gap-2.5 text-sm">
-              <span className="font-medium text-white">{flow.name}</span>
-              <span className="text-white/35">in</span>
+          <div className="flex shrink-0 items-center gap-2 border-b border-white/5 px-3 py-3 md:gap-4 md:px-5">
+            <div className="flex min-w-0 items-center gap-2.5 text-sm">
+              <span className="truncate font-medium text-white">{flow.name}</span>
+              <span className="hidden text-white/35 md:inline">in</span>
               {appIconUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={appIconUrl} alt="" className="h-5 w-5 rounded" />
+                <img src={appIconUrl} alt="" className="hidden h-5 w-5 rounded md:block" />
               ) : (
                 <span
-                  className="flex h-5 w-5 items-center justify-center rounded text-[13px] font-semibold text-white"
+                  className="hidden h-5 w-5 items-center justify-center rounded text-[13px] font-semibold text-white md:flex"
                   style={{ background: accentColor ?? 'oklch(0.5 0.22 254)' }}
                 >
                   {appName.charAt(0).toUpperCase()}
                 </span>
               )}
-              <span className="font-semibold text-white">{appName}</span>
+              <span className="hidden font-semibold text-white md:inline">{appName}</span>
             </div>
 
-            <span className="ml-auto text-[13px] tabular-nums text-white/35">
+            <span className="ml-auto whitespace-nowrap text-[13px] tabular-nums text-white/35">
               {String(idx + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
             </span>
 
             <button
               type="button"
               onClick={copyFlowLink}
-              className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] text-white/45 transition-colors hover:bg-white/8 hover:text-white"
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] text-white/45 transition-colors hover:bg-white/8 hover:text-white md:px-3"
               title="Copy flow link"
             >
               <Link2 size={15} />
-              {copied ? 'Copied' : 'Copy link'}
+              <span className="hidden md:inline">{copied ? 'Copied' : 'Copy link'}</span>
             </button>
             <button
               type="button"
               onClick={close}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-white/45 transition-colors hover:bg-white/8 hover:text-white"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/45 transition-colors hover:bg-white/8 hover:text-white"
               aria-label="Close"
             >
               <X size={18} />
@@ -346,7 +346,7 @@ export function FrameModal({
         </div>
 
         {/* Right box: Comments - separate rounded box */}
-        <div className="flex w-[340px] shrink-0 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl">
+        <div className="flex max-h-[45%] w-full shrink-0 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl md:max-h-none md:w-[340px]">
           <CommentsPanel
             frameRowId={frameRowId}
             comments={comments}

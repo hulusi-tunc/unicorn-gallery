@@ -114,7 +114,7 @@ export default async function AppLayout({
         {manifest ? (
           <FlowSidebar manifest={manifest} appSlug={app.slug} unreadByFlow={unresolvedByFlow} />
         ) : null}
-        <div className="flex flex-1">{children}</div>
+        <div className="flex min-w-0 flex-1">{children}</div>
       </div>
       {modal}
     </div>
