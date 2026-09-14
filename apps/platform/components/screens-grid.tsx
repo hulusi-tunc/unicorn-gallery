@@ -10,7 +10,11 @@ import type { FrameUnresolvedSummary } from '@/lib/queries';
 
 /**
  * Flat grid of every frame in the app - shown on the Screens tab.
- * 3-column grid with Mobbin-style card containers.
+ * 3-column grid with Mobbin-style card containers, narrowing on small screens:
+ * three columns on a 375px phone left 98px cards whose screenshot was 46px
+ * wide, which tells you nothing about the screen. Phone frames drop to two
+ * columns; web captures are landscape, so they need the full width and drop
+ * to one.
  */
 export function ScreensGrid({
   flows,
@@ -31,7 +35,11 @@ export function ScreensGrid({
   );
 
   return (
-    <div className="grid grid-cols-3 gap-4 py-4">
+    <div
+      className={`grid gap-4 py-4 ${
+        isMobile ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+      }`}
+    >
       {cards.map(({ flow, frame }) => {
         const unresolved = unresolvedByFrame?.get(frame.id) ?? null;
         return (
