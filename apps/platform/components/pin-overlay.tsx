@@ -47,6 +47,12 @@ export function PinOverlay({
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [showTooltip, setShowTooltip] = useState(false);
+  /**
+   * Where the hint first appears. pointermove then moves it imperatively, so
+   * tracking the cursor costs no re-renders — but the first frame needs a
+   * position, or the hint flashes at the viewport origin.
+   */
+  const [tipOrigin, setTipOrigin] = useState<{ x: number; y: number } | null>(null);
   const [dragState, setDragState] = useState<{
     startX: number;
     startY: number;
@@ -175,8 +181,12 @@ export function PinOverlay({
   return (
     <div
       ref={containerRef}
-      onPointerEnter={() => { if (!readOnly) setShowTooltip(true); }}
-      onPointerLeave={() => setShowTooltip(false)}
+      onPointerEnter={(e) => {
+        if (readOnly) return;
+        setTipOrigin({ x: e.clientX, y: e.clientY });
+        setShowTooltip(true);
+      }}
+      onPointerLeave={() => { setShowTooltip(false); setTipOrigin(null); }}
       onPointerDown={(e) => { setShowTooltip(false); onPointerDown(e); }}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -272,14 +282,19 @@ export function PinOverlay({
       )}
 
       {/* Floating tooltip that follows cursor */}
-      {showTooltip && !dragState && (
+      {showTooltip && !dragState && tipOrigin
+        ? createPortal(
         <div
           ref={tooltipRef}
           style={{
             position: 'fixed',
+            left: tipOrigin.x,
+            top: tipOrigin.y,
             transform: 'translate(20px, 8px)',
             pointerEvents: 'none',
-            zIndex: 60,
+            // Portalled to <body>, so it no longer shares the modal's stacking
+            // context — it has to clear the modal's own z-[120] to be seen.
+            zIndex: 200,
             display: 'flex',
             alignItems: 'center',
             gap: 5,
@@ -295,8 +310,10 @@ export function PinOverlay({
           }}
         >
           Click to comment
-        </div>
-      )}
+        </div>,
+        document.body,
+          )
+        : null}
     </div>
   );
 }
