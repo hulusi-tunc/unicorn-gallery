@@ -739,3 +739,80 @@ create policy app_releases_read_all on public.app_releases for select
 drop policy if exists app_releases_agency_write on public.app_releases;
 create policy app_releases_agency_write on public.app_releases for all
   using (public.is_agency()) with check (public.is_agency());
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Web-side structure edits.
+--
+-- A capture push owns the pixels. Everything about how those pixels are
+-- PRESENTED — what a flow is called, what order screens sit in, which flow a
+-- screen belongs to, whether it is shown at all — can be changed by a designer
+-- or PM in the gallery, and their change has to survive the next push.
+--
+-- Rather than teach the intake which columns a human has touched (a rule it
+-- would have to get right on every future field), edits live here and are
+-- applied when the manifest is READ. The intake stays exactly as it was: it
+-- keeps writing raw capture values into `frames`, and the override wins on the
+-- way out. That also means a screen deleted on the web cannot be resurrected
+-- by re-pushing it, which a "last write wins" scheme could not promise.
+--
+-- Both tables key on the capture's own identifiers rather than a row id, so an
+-- override survives a frame row being replaced by a later build.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create table if not exists public.flow_overrides (
+  app_id uuid not null references public.apps(id) on delete cascade,
+  flow_id text not null,
+  -- NULL on any of these means "inherit whatever the capture said".
+  name text,
+  parent_flow_id text,
+  -- `parent_flow_id` cannot express "move this to the top level", because NULL
+  -- there already means "inherit". This flag does.
+  clear_parent boolean not null default false,
+  position int,
+  -- Deletion is soft: the frames stay for old versions and for their comments.
+  hidden boolean not null default false,
+  -- A flow created in the gallery has no frames of its own until screens are
+  -- moved into it, so nothing else would prove it exists.
+  created_on_web boolean not null default false,
+  updated_by uuid references public.profiles(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (app_id, flow_id)
+);
+
+create table if not exists public.frame_overrides (
+  app_id uuid not null references public.apps(id) on delete cascade,
+  -- The frame's identity as captured. `move_to_flow_id` is where it now shows.
+  flow_id text not null,
+  frame_id text not null,
+  name text,
+  move_to_flow_id text,
+  position int,
+  hidden boolean not null default false,
+  updated_by uuid references public.profiles(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (app_id, flow_id, frame_id)
+);
+
+create index if not exists flow_overrides_app_idx on public.flow_overrides(app_id);
+create index if not exists frame_overrides_app_idx on public.frame_overrides(app_id);
+
+alter table public.flow_overrides enable row level security;
+alter table public.frame_overrides enable row level security;
+
+-- Same visibility as the frames they describe: a customer viewing a project
+-- must read them or they would see the un-edited tree. Only agency writes.
+drop policy if exists flow_overrides_select on public.flow_overrides;
+create policy flow_overrides_select on public.flow_overrides for select
+  using (public.is_agency() or public.is_app_customer(app_id));
+
+drop policy if exists flow_overrides_agency_write on public.flow_overrides;
+create policy flow_overrides_agency_write on public.flow_overrides for all
+  using (public.is_agency()) with check (public.is_agency());
+
+drop policy if exists frame_overrides_select on public.frame_overrides;
+create policy frame_overrides_select on public.frame_overrides for select
+  using (public.is_agency() or public.is_app_customer(app_id));
+
+drop policy if exists frame_overrides_agency_write on public.frame_overrides;
+create policy frame_overrides_agency_write on public.frame_overrides for all
+  using (public.is_agency()) with check (public.is_agency());
