@@ -168,21 +168,39 @@ export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
     const sibling = flows.find((f) => f.id === targetId);
     const dragged = flows.find((f) => f.id === draggedId);
     if (!sibling || !dragged) return;
-    // Same parent → a reorder. Different parent → a re-parent, which is the
-    // only way to make a sub-flow here.
-    if ((sibling.parentFlowId ?? null) !== (dragged.parentFlowId ?? null)) {
-      run(() => setFlowParent(appSlug, draggedId, sibling.parentFlowId ?? null));
-    } else {
-      const sibs = flows.filter(
-        (f) => (f.parentFlowId ?? null) === (sibling.parentFlowId ?? null),
-      );
-      const from = sibs.findIndex((f) => f.id === draggedId);
-      const to = sibs.findIndex((f) => f.id === targetId);
-      const next = [...sibs];
-      const [m] = next.splice(from, 1);
-      if (m) next.splice(to, 0, m);
-      run(() => reorderFlows(appSlug, next.map((f) => f.id)));
+    // Dragging only ever reorders within one level. Nesting is the "Nest in…"
+    // menu instead: dropping onto a row is ambiguous — it reads equally as
+    // "put it before this" and "put it inside this" — and the menu can also
+    // reach a flow that has no children to drop beside.
+    if ((sibling.parentFlowId ?? null) !== (dragged.parentFlowId ?? null)) return;
+    const sibs = flows.filter(
+      (f) => (f.parentFlowId ?? null) === (sibling.parentFlowId ?? null),
+    );
+    const from = sibs.findIndex((f) => f.id === draggedId);
+    const to = sibs.findIndex((f) => f.id === targetId);
+    const next = [...sibs];
+    const [m] = next.splice(from, 1);
+    if (m) next.splice(to, 0, m);
+    run(() => reorderFlows(appSlug, next.map((f) => f.id)));
+  };
+
+  /**
+   * Flows this one may be nested in: anything but itself and its own
+   * descendants, since either would make a loop the tree cannot draw.
+   */
+  const nestOptions = (flowId: string): ManifestFlowSnapshot[] => {
+    const banned = new Set([flowId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const f of flows) {
+        if (f.parentFlowId && banned.has(f.parentFlowId) && !banned.has(f.id)) {
+          banned.add(f.id);
+          grew = true;
+        }
+      }
     }
+    return flows.filter((f) => !banned.has(f.id));
   };
 
   const renderFlow = (flow: ManifestFlowSnapshot, depth: number): ReactNode => {
@@ -244,6 +262,27 @@ export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
           <span className="shrink-0 text-xs tabular-nums opacity-40">
             {flow.frames.length}
           </span>
+          <select
+            aria-label={`Nest ${flow.name} in another flow`}
+            title="Nest this flow inside another"
+            className="w-[4.5rem] shrink-0 rounded border border-black/10 bg-transparent px-1 text-[10px] opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100 dark:border-white/15"
+            value=""
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const v = e.target.value;
+              e.currentTarget.value = '';
+              if (!v) return;
+              run(() => setFlowParent(appSlug, flow.id, v === '__top' ? null : v));
+            }}
+          >
+            <option value="">Nest in…</option>
+            <option value="__top">Top level</option>
+            {nestOptions(flow.id).map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             aria-label={`Delete ${flow.name}`}
@@ -302,8 +341,9 @@ export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
         </div>
         <div className="flex flex-col gap-0.5">{roots.map((f) => renderFlow(f, 0))}</div>
         <p className="mt-3 px-2 text-xs leading-relaxed opacity-45">
-          Drag a flow onto another to nest it. Drag a screen onto a flow to move
-          it there. Double-click a name to rename.
+          Double-click a name to rename it. Drag a flow to reorder it among its
+          siblings, or use “Nest in…” to move it under another. Screens are
+          reordered and moved from the cards on the right.
         </p>
       </aside>
 
