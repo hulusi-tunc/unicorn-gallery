@@ -94,8 +94,15 @@ async function main(): Promise<void> {
         }
         for (const flowFile of playwrightFlowFiles) {
           try {
-            const flow = await runPlaywrightFlow({ flowFile, page, outDir, projectRoot, log });
-            if (flow && flow.frames.length > 0) flows.push(flow);
+            const produced = await runPlaywrightFlow({
+              flowFile,
+              page,
+              outDir,
+              projectRoot,
+              fullPage: config.fullPage,
+              log,
+            });
+            flows.push(...produced);
           } catch (err) {
             log(`[gallery-capture] Playwright flow ${flowFile} failed: ${(err as Error).message}`);
           }
@@ -119,7 +126,7 @@ async function main(): Promise<void> {
     buildSha,
     capturedAt: new Date().toISOString(),
     platform,
-    flows,
+    flows: keepRenderableFlows(flows, log),
   };
 
   await writeManifest(outDir, manifest);
@@ -148,6 +155,24 @@ async function uploadCapture(
   const { uploadCapture: doUpload } = await import('./upload.js');
   await doUpload({ url, outDir, manifest, token, log });
   log('[gallery-capture] Upload complete.');
+}
+
+/**
+ * Drop flows that captured nothing, except the ones another flow nests under.
+ * A section container legitimately has no frames of its own — it exists to hold
+ * its sub-flows — and dropping it would orphan every child in the gallery.
+ */
+function keepRenderableFlows(flows: ManifestFlow[], log: (m: string) => void): ManifestFlow[] {
+  const parents = new Set(flows.map((f) => f.parentFlowId).filter(Boolean));
+  const kept: ManifestFlow[] = [];
+  for (const flow of flows) {
+    if (flow.frames.length > 0 || parents.has(flow.id)) {
+      kept.push(flow);
+    } else {
+      log(`[gallery-capture] Flow "${flow.id}" captured no frames and holds none — dropped.`);
+    }
+  }
+  return kept;
 }
 
 function parsePlatform(input: string): Platform {
