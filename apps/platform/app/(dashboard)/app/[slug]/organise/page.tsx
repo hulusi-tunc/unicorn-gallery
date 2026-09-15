@@ -47,7 +47,7 @@ export default async function OrganisePage({
           Nothing captured yet — push a build and the flows will show up here.
         </p>
       ) : (
-        <OrganiseBoard appSlug={decoded} flows={manifest.flows} />
+        <OrganiseBoard appSlug={decoded} platform={app.platform} flows={manifest.flows} />
       )}
     </main>
   );

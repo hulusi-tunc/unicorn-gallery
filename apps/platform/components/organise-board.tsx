@@ -3,7 +3,9 @@
 import { useMemo, useState, useTransition } from 'react';
 import type { ReactNode } from 'react';
 import { ChevronDown, ChevronRight, GripVertical, Plus, RotateCcw, Trash2 } from 'lucide-react';
-import type { ManifestFlowSnapshot } from '@/lib/db';
+import { DeviceBezel } from '@/components/device-bezel';
+import { WebCardThumb } from '@/components/web-card-thumb';
+import type { ManifestFlowSnapshot, Platform } from '@/lib/db';
 import { imageHref } from '@/lib/image-href';
 import {
   createFlow,
@@ -33,6 +35,7 @@ import {
 
 interface Props {
   appSlug: string;
+  platform: Platform;
   flows: ManifestFlowSnapshot[];
 }
 
@@ -41,7 +44,8 @@ function keyOf(flowId: string, frame: { id: string; originFlowId?: string }): Fr
   return { flowId: frame.originFlowId ?? flowId, frameId: frame.id };
 }
 
-export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
+export function OrganiseBoard({ appSlug, platform, flows }: Props): ReactNode {
+  const isMobile = platform !== 'web';
   // Open on a flow that has something to show: the first entry is often a
   // section container with no screens of its own, and landing on an empty
   // grid reads as "nothing here" rather than "pick a flow".
@@ -234,7 +238,12 @@ export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
           }}
           onClick={() => setSelected(flow.id)}
           className={[
-            'group flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm',
+            'group flex items-center gap-1.5 rounded-md px-2 py-[7px] text-sm',
+            // A section container holds sub-flows and no screens of its own;
+            // it reads as a heading so an empty right pane is never a surprise.
+            flow.frames.length === 0 && kids.length > 0
+              ? 'font-medium text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]'
+              : 'text-[oklch(0.32_0.01_260)] dark:text-[oklch(0.78_0.012_260)]',
             selected === flow.id
               ? 'bg-[oklch(0.93_0.006_260)] dark:bg-[oklch(0.24_0.008_260)]'
               : 'hover:bg-[oklch(0.96_0.004_260)] dark:hover:bg-[oklch(0.2_0.007_260)]',
@@ -259,8 +268,8 @@ export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
           >
             {flow.name}
           </button>
-          <span className="shrink-0 text-xs tabular-nums opacity-40">
-            {flow.frames.length}
+          <span className="shrink-0 text-xs tabular-nums opacity-35">
+            {flow.frames.length || ''}
           </span>
           <select
             aria-label={`Nest ${flow.name} in another flow`}
@@ -309,7 +318,7 @@ export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
           taller than the viewport, and if it drove the page scroll the screens
           you are arranging would slide out of sight while you reached for a
           flow to drop them on. */}
-      <aside className="sticky top-4 flex max-h-[calc(100vh-7rem)] w-72 shrink-0 flex-col overflow-y-auto">
+      <aside className="sticky top-4 flex max-h-[calc(100vh-7rem)] w-80 shrink-0 flex-col overflow-y-auto pr-1">
         <div className="mb-2 flex items-center justify-between px-2">
           <span className="font-mono text-[10px] uppercase tracking-wider opacity-50">
             Flows
@@ -354,14 +363,24 @@ export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
             {error}
           </p>
         ) : null}
+        {current ? (
+          <div className="mb-5 flex items-baseline gap-3">
+            <h2 className="text-lg font-semibold tracking-tight">{current.name}</h2>
+            <span className="text-sm opacity-45">
+              {current.frames.length}{' '}
+              {current.frames.length === 1 ? 'screen' : 'screens'}
+            </span>
+          </div>
+        ) : null}
+
         {!current ? (
           <p className="text-sm opacity-50">Pick a flow.</p>
         ) : current.frames.length === 0 ? (
           <p className="text-sm opacity-50">
-            “{current.name}” has no screens yet — drag one here from another flow.
+            “{current.name}” has no screens yet — move one here from another flow.
           </p>
         ) : (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-5">
             {current.frames.map((frame, i) => (
               <div
                 key={`${frame.originFlowId ?? current.id}::${frame.id}`}
@@ -381,36 +400,88 @@ export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
                   onFrameDrop(e, i);
                   setDragKind(null);
                 }}
-                className="group flex flex-col gap-2"
-                style={{ cursor: 'grab' }}
+                className="group flex cursor-grab flex-col gap-2.5 active:cursor-grabbing"
               >
+                {/* Same card treatment as the browse grid: the screen sits in
+                    its real device frame, so arranging screens looks like the
+                    gallery you are arranging rather than a separate tool. */}
                 <div
-                  className="relative overflow-hidden rounded-lg bg-[oklch(0.96_0.004_260)] dark:bg-[oklch(0.19_0.007_260)]"
-                  style={{ aspectRatio: '3 / 4' }}
+                  className="relative overflow-hidden rounded-xl bg-[oklch(0.96_0.004_260)] transition-shadow duration-150 group-hover:shadow-[0_8px_24px_-12px_rgba(15,20,33,0.25)] dark:bg-[oklch(0.19_0.007_260)]"
+                  style={{ aspectRatio: isMobile ? '3 / 4' : '16 / 10' }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imageHref(frame.image)}
-                    alt={frame.name}
-                    className="h-full w-full object-cover object-top"
-                    draggable={false}
-                  />
-                  <button
-                    type="button"
-                    aria-label={`Delete ${frame.name}`}
-                    className="absolute right-2 top-2 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                    onClick={() =>
-                      run(() =>
-                        setFrameHidden(appSlug, keyOf(current.id, frame).flowId, frame.id, true),
-                      )
-                    }
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  {isMobile ? (
+                    <div className="flex h-full items-center justify-center">
+                      <DeviceBezel
+                        src={imageHref(frame.image)}
+                        alt={frame.name}
+                        style={{ height: '82%' }}
+                      />
+                    </div>
+                  ) : (
+                    <WebCardThumb src={imageHref(frame.image)} alt={frame.name} />
+                  )}
+
+                  {/* Controls ride on the card and only on hover. Permanent
+                      arrows and a bare select under every screen turned the
+                      grid into a form. */}
+                  <div className="pointer-events-none absolute inset-x-2 bottom-2 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    <div className="pointer-events-auto flex items-center rounded-lg bg-black/70 text-white backdrop-blur-sm">
+                      <button
+                        type="button"
+                        aria-label={`Move ${frame.name} earlier`}
+                        disabled={i === 0}
+                        className="px-2 py-1.5 text-xs disabled:opacity-25"
+                        onClick={() => nudgeFrame(i, -1)}
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Move ${frame.name} later`}
+                        disabled={i === current.frames.length - 1}
+                        className="px-2 py-1.5 text-xs disabled:opacity-25"
+                        onClick={() => nudgeFrame(i, 1)}
+                      >
+                        →
+                      </button>
+                    </div>
+                    <select
+                      aria-label={`Move ${frame.name} to another flow`}
+                      title="Move to another flow"
+                      className="pointer-events-auto min-w-0 flex-1 truncate rounded-lg border-0 bg-black/70 px-2 py-1.5 text-[11px] text-white backdrop-blur-sm"
+                      value=""
+                      onChange={(e) => {
+                        moveFrameTo(i, e.target.value);
+                        e.currentTarget.value = '';
+                      }}
+                    >
+                      <option value="">Move to…</option>
+                      {flows
+                        .filter((f) => f.id !== current.id)
+                        .map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${frame.name}`}
+                      className="pointer-events-auto rounded-lg bg-black/70 p-1.5 text-white backdrop-blur-sm hover:bg-red-600/90"
+                      onClick={() =>
+                        run(() =>
+                          setFrameHidden(appSlug, keyOf(current.id, frame).flowId, frame.id, true),
+                        )
+                      }
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
+
                 <button
                   type="button"
-                  className="truncate text-left text-xs opacity-70"
+                  className="truncate pl-0.5 text-left text-sm font-medium text-[oklch(0.15_0.008_260)] dark:text-[oklch(0.97_0.005_260)]"
                   title="Double-click to rename"
                   onDoubleClick={() => {
                     const name = window.prompt('Screen name', frame.name);
@@ -422,47 +493,6 @@ export function OrganiseBoard({ appSlug, flows }: Props): ReactNode {
                 >
                   {frame.name}
                 </button>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    aria-label={`Move ${frame.name} earlier`}
-                    disabled={i === 0}
-                    className="rounded px-1 text-xs opacity-40 hover:opacity-100 disabled:opacity-10"
-                    onClick={() => nudgeFrame(i, -1)}
-                  >
-                    ←
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Move ${frame.name} later`}
-                    disabled={i === current.frames.length - 1}
-                    className="rounded px-1 text-xs opacity-40 hover:opacity-100 disabled:opacity-10"
-                    onClick={() => nudgeFrame(i, 1)}
-                  >
-                    →
-                  </button>
-                  {/* Moving between flows is a menu, not a drag: dropping a card
-                      onto a one-line sidebar row is a small target, and a select
-                      is the only version of this that works from a keyboard. */}
-                  <select
-                    aria-label={`Move ${frame.name} to another flow`}
-                    className="ml-auto max-w-[8rem] truncate rounded border border-black/10 bg-transparent px-1 py-0.5 text-[11px] opacity-60 hover:opacity-100 dark:border-white/15"
-                    value=""
-                    onChange={(e) => {
-                      moveFrameTo(i, e.target.value);
-                      e.currentTarget.value = '';
-                    }}
-                  >
-                    <option value="">Move to…</option>
-                    {flows
-                      .filter((f) => f.id !== current.id)
-                      .map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
               </div>
             ))}
           </div>
