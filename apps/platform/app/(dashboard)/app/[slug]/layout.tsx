@@ -119,7 +119,7 @@ export default async function AppLayout({
             canOrganise={canEdit}
           />
         ) : null}
-        <div className="flex flex-1">{children}</div>
+        <div className="flex min-w-0 flex-1">{children}</div>
       </div>
       {modal}
     </div>

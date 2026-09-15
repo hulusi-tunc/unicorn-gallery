@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
+  createContext,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -41,6 +43,15 @@ const PANEL_WIDTH_KEY = 'comments-panel-width';
 const DEFAULT_PANEL_WIDTH = 320;
 const MIN_PANEL_WIDTH = 280;
 const MAX_PANEL_WIDTH = 640;
+
+/**
+ * Lets a CommentItem hide itself the moment the user deletes it, without
+ * drilling a callback through ThreadView. Restored on failure.
+ */
+const CommentMutations = createContext<{
+  hide: (id: string) => void;
+  unhide: (id: string) => void;
+} | null>(null);
 
 export function CommentsPanel({
   frameRowId,
@@ -90,6 +101,19 @@ export function CommentsPanel({
   const [showResolved, setShowResolved] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [optimisticComments, setOptimisticComments] = useState<CommentWithAuthor[]>([]);
+  /**
+   * Comments the user has just deleted. Removed from the list immediately so
+   * the click feels instant; restored if the server rejects the delete.
+   */
+  const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(() => new Set());
+  /**
+   * Guards against a second submit landing before the first one returns.
+   * The ref is what actually blocks: rapid clicks all run their handler in
+   * one task, before React re-renders, so a state flag is still false for
+   * every one of them. The state exists only to drive the button.
+   */
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Resizable width, persisted in localStorage so it survives nav.
   // Mirrors the FlowSidebar pattern — handle on the *left* edge here
@@ -143,8 +167,31 @@ export function CommentsPanel({
   const allComments = useMemo(() => {
     const realIds = new Set(comments.map((c) => c.id));
     const fresh = optimisticComments.filter((o) => !realIds.has(o.id));
-    return [...comments, ...fresh];
-  }, [comments, optimisticComments]);
+    return [...comments, ...fresh].filter((c) => !hiddenIds.has(c.id));
+  }, [comments, optimisticComments, hiddenIds]);
+
+  // Once the server agrees a comment is gone, stop tracking it by hand.
+  useEffect(() => {
+    if (hiddenIds.size === 0) return;
+    const realIds = new Set(comments.map((c) => c.id));
+    setHiddenIds((prev) => {
+      const next = new Set([...prev].filter((id) => realIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [comments, hiddenIds.size]);
+
+  const mutations = useMemo(
+    () => ({
+      hide: (id: string) => setHiddenIds((prev) => new Set(prev).add(id)),
+      unhide: (id: string) =>
+        setHiddenIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        }),
+    }),
+    [],
+  );
 
   useEffect(() => {
     if (optimisticComments.length > 0) {
@@ -177,7 +224,12 @@ export function CommentsPanel({
   async function onSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
     const text = body.trim();
-    if (!text) return;
+    // Clearing `body` disables the button, but there's a window before React
+    // re-renders where a fast second click still gets through — ten rapid
+    // clicks reliably posted duplicates. This closes it.
+    if (!text || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
     setError(null);
 
     const tempId = `optimistic-${Date.now()}`;
@@ -213,16 +265,30 @@ export function CommentsPanel({
         setError(res.error);
         setBody(text);
       } else {
+        // Adopt the id the server just assigned. Until router.refresh() lands
+        // this row is still the optimistic copy, but it now carries a real id,
+        // so it dedupes against the server list instead of doubling up — and
+        // deleting it hits a row that actually exists.
+        if (res.commentId) {
+          const realId = res.commentId;
+          setOptimisticComments((prev) =>
+            prev.map((c) => (c.id === tempId ? { ...c, id: realId } : c)),
+          );
+        }
         router.refresh();
       }
     } catch (err) {
       setOptimisticComments((prev) => prev.filter((c) => c.id !== tempId));
       setError((err as Error).message);
       setBody(text);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
   return (
+    <CommentMutations.Provider value={mutations}>
     <aside
       style={{
         display: 'flex',
@@ -466,7 +532,7 @@ export function CommentsPanel({
             )}
             <button
               type="submit"
-              disabled={!body.trim()}
+              disabled={submitting || !body.trim()}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -479,18 +545,19 @@ export function CommentsPanel({
                 fontSize: 12,
                 fontWeight: 500,
                 padding: '5px 10px',
-                cursor: 'pointer',
-                opacity: !body.trim() ? 0.5 : 1,
+                cursor: submitting || !body.trim() ? 'not-allowed' : 'pointer',
+                opacity: submitting || !body.trim() ? 0.5 : 1,
               }}
             >
-              <Send size={11} />
-              Post
+              {submitting ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+              {submitting ? 'Posting' : 'Post'}
             </button>
           </div>
         </div>
       </form>
       )}
     </aside>
+    </CommentMutations.Provider>
   );
 }
 
@@ -566,6 +633,8 @@ function CommentItem({
   const canEdit = isAuthor;
   const canDelete = isAuthor || isAgency;
 
+  const mutations = useContext(CommentMutations);
+
   const onToggleResolve = (): void => {
     startTransition(async () => {
       const res = await setCommentResolved({
@@ -610,9 +679,13 @@ function CommentItem({
 
   const onDelete = (): void => {
     if (!confirm('Delete this comment? This cannot be undone.')) return;
+    // Drop it from the list straight away — waiting on the round-trip plus a
+    // full router.refresh() made deleting feel broken.
+    mutations?.hide(comment.id);
     startTransition(async () => {
       const res = await deleteComment({ commentId: comment.id, appSlug });
       if (res.error) {
+        mutations?.unhide(comment.id);
         alert(res.error);
       } else {
         router.refresh();
@@ -1027,11 +1100,15 @@ function ReplyForm({
   const router = useRouter();
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
     const text = body.trim();
-    if (!text) return;
+    if (!text || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
     setError(null);
     setBody('');
     onClose();
@@ -1045,6 +1122,9 @@ function ReplyForm({
       }
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -1112,7 +1192,7 @@ function ReplyForm({
         </button>
         <button
           type="submit"
-          disabled={!body.trim()}
+          disabled={submitting || !body.trim()}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -1125,11 +1205,11 @@ function ReplyForm({
             fontFamily: editorialFonts.body,
             fontSize: 11,
             fontWeight: 500,
-            cursor: 'pointer',
-            opacity: !body.trim() ? 0.5 : 1,
+            cursor: submitting || !body.trim() ? 'not-allowed' : 'pointer',
+            opacity: submitting || !body.trim() ? 0.5 : 1,
           }}
         >
-          <Send size={10} />
+          {submitting ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
           Reply
         </button>
       </div>

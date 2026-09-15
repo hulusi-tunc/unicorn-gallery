@@ -36,6 +36,7 @@ export function DeviceBezel({
   objectPosition = 'top center',
   className,
   style,
+  screenWrapper,
 }: {
   src: string;
   alt: string;
@@ -46,6 +47,13 @@ export function DeviceBezel({
   className?: string;
   /** Caller sizing — height / position / filter. Aspect-ratio is set here. */
   style?: CSSProperties;
+  /**
+   * Wraps the screenshot inside the device's screen cutout. Used to layer the
+   * comment-pin overlay onto mobile frames: because the wrapper sits around
+   * the image itself, pin coordinates normalise against the screenshot rather
+   * than the bezel chrome, and markers scroll with a long capture.
+   */
+  screenWrapper?: (screen: ReactNode) => ReactNode;
 }): ReactNode {
   const [ratio, setRatio] = useState<number | null>(null);
   const spec = chooseBezel(ratio);
@@ -80,23 +88,28 @@ export function DeviceBezel({
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          ref={measure}
-          src={src}
-          alt={alt}
-          draggable={false}
-          loading="lazy"
-          onLoad={(e) => {
-            const t = e.currentTarget;
-            if (t.naturalWidth && t.naturalHeight) setRatio(t.naturalWidth / t.naturalHeight);
-          }}
-          style={
-            scrollable
-              ? { display: 'block', width: '100%', height: 'auto' }
-              : { display: 'block', width: '100%', height: '100%', objectFit, objectPosition }
-          }
-        />
+        {(() => {
+          const screen = (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              ref={measure}
+              src={src}
+              alt={alt}
+              draggable={false}
+              loading="lazy"
+              onLoad={(e) => {
+                const t = e.currentTarget;
+                if (t.naturalWidth && t.naturalHeight) setRatio(t.naturalWidth / t.naturalHeight);
+              }}
+              style={
+                scrollable
+                  ? { display: 'block', width: '100%', height: 'auto' }
+                  : { display: 'block', width: '100%', height: '100%', objectFit, objectPosition }
+              }
+            />
+          );
+          return screenWrapper ? screenWrapper(screen) : screen;
+        })()}
       </div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={spec.light} alt="" aria-hidden className="block dark:hidden" style={FRAME_STYLE} />

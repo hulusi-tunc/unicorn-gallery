@@ -5,6 +5,12 @@ import { getCurrentProfile, getMentionableProfilesForApp } from '@/lib/queries';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase/server';
 
 /**
+ * How long an identical comment from the same author on the same frame is
+ * treated as a duplicate rather than a new post.
+ */
+const DUPLICATE_WINDOW_MS = 10_000;
+
+/**
  * Insert a new comment and fan out @mention notifications for any profile
  * handles found in the body. The DB trigger already creates the generic
  * `comment` and `reply` notifications; this action adds `mention` rows
@@ -28,6 +34,26 @@ export async function postComment(input: {
   if (!body) return { error: 'Empty comment.' };
 
   const supabase = await getSupabaseServerClient();
+
+  // Server-side backstop against duplicate posts. The composer disables its
+  // button while a submit is in flight, but that can't cover a retry, a
+  // double-fired Enter, or two tabs — and ten rapid clicks did reliably
+  // produce duplicates. Treat an identical body from the same author on the
+  // same frame inside the window as the same comment and return the original,
+  // so the caller still sees success.
+  const since = new Date(Date.now() - DUPLICATE_WINDOW_MS).toISOString();
+  const { data: recent } = await supabase
+    .from('comments')
+    .select('id')
+    .eq('frame_id', input.frameRowId)
+    .eq('author_id', profile.id)
+    .eq('body', body)
+    .gte('created_at', since)
+    .limit(1);
+  if (recent && recent.length > 0) {
+    return { ok: true, commentId: recent[0]!.id };
+  }
+
   const { data: inserted, error } = await supabase
     .from('comments')
     .insert({

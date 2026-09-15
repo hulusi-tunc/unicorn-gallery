@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import type { CommentWithAuthor } from '@/lib/comments';
 
 export interface PinDraft {
@@ -22,6 +23,9 @@ export interface PinDraft {
 const DRAG_THRESHOLD_MOUSE = 4;
 const DRAG_THRESHOLD_TOUCH = 8;
 const PIN_SIZE = 26;
+const POPOVER_WIDTH = 260;
+/** Rough popover height, used only to keep it inside the viewport. */
+const POPOVER_EST_HEIGHT = 170;
 
 const COMMENT_CURSOR_SVG = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="36" viewBox="0 0 32 36" fill="none"><g filter="url(#s)"><path d="M4 6a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4h-7.172L12 26.828V22H8a4 4 0 0 1-4-4V6z" fill="white"/><path d="M4 6a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4h-7.172L12 26.828V22H8a4 4 0 0 1-4-4V6z" stroke="black" stroke-opacity="0.08" stroke-width="0.75"/></g><line x1="11" y1="12" x2="21" y2="12" stroke="black" stroke-opacity="0.55" stroke-width="1.5" stroke-linecap="round"/><line x1="16" y1="7" x2="16" y2="17" stroke="black" stroke-opacity="0.55" stroke-width="1.5" stroke-linecap="round"/><defs><filter id="s" x="1" y="0" width="30" height="32" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="1"/><feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.18 0"/><feOffset dy="1.5"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs></svg>`)}`;
 
@@ -43,6 +47,12 @@ export function PinOverlay({
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [showTooltip, setShowTooltip] = useState(false);
+  /**
+   * Where the hint first appears. pointermove then moves it imperatively, so
+   * tracking the cursor costs no re-renders — but the first frame needs a
+   * position, or the hint flashes at the viewport origin.
+   */
+  const [tipOrigin, setTipOrigin] = useState<{ x: number; y: number } | null>(null);
   const [dragState, setDragState] = useState<{
     startX: number;
     startY: number;
@@ -171,8 +181,12 @@ export function PinOverlay({
   return (
     <div
       ref={containerRef}
-      onPointerEnter={() => { if (!readOnly) setShowTooltip(true); }}
-      onPointerLeave={() => setShowTooltip(false)}
+      onPointerEnter={(e) => {
+        if (readOnly) return;
+        setTipOrigin({ x: e.clientX, y: e.clientY });
+        setShowTooltip(true);
+      }}
+      onPointerLeave={() => { setShowTooltip(false); setTipOrigin(null); }}
       onPointerDown={(e) => { setShowTooltip(false); onPointerDown(e); }}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -268,14 +282,19 @@ export function PinOverlay({
       )}
 
       {/* Floating tooltip that follows cursor */}
-      {showTooltip && !dragState && (
+      {showTooltip && !dragState && tipOrigin
+        ? createPortal(
         <div
           ref={tooltipRef}
           style={{
             position: 'fixed',
+            left: tipOrigin.x,
+            top: tipOrigin.y,
             transform: 'translate(20px, 8px)',
             pointerEvents: 'none',
-            zIndex: 60,
+            // Portalled to <body>, so it no longer shares the modal's stacking
+            // context — it has to clear the modal's own z-[120] to be seen.
+            zIndex: 200,
             display: 'flex',
             alignItems: 'center',
             gap: 5,
@@ -291,8 +310,10 @@ export function PinOverlay({
           }}
         >
           Click to comment
-        </div>
-      )}
+        </div>,
+        document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -303,16 +324,25 @@ export function PinPopover({
   onSubmit,
   onCancel,
   mentionables,
+  floating = false,
 }: {
   pin: PinDraft;
   containerRef: React.RefObject<HTMLDivElement | null>;
   onSubmit: (body: string) => void;
   onCancel: () => void;
   mentionables: { handle: string; name: string | null }[];
+  /**
+   * Render into a portal, positioned in viewport coordinates, instead of
+   * absolutely inside the overlay. Needed on a phone bezel, where the screen
+   * cutout clips overflow and would otherwise trap the popover inside the
+   * device — and where a 260px popover doesn't fit in a ~360px screen anyway.
+   */
+  floating?: boolean;
 }): ReactNode {
   const [body, setBody] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const [fixedPos, setFixedPos] = useState<{ left: number; top: number } | null>(null);
 
   useEffect(() => {
     requestAnimationFrame(() => textareaRef.current?.focus());
@@ -336,16 +366,47 @@ export function PinPopover({
   const anchorX = pin.w ? pin.x + pin.w : pin.x;
   const anchorY = pin.y;
 
-  return (
+  // Map the pin's fractional position onto the screen, then keep the popover
+  // inside the viewport. Recomputed on scroll so it tracks a capture being
+  // scrolled inside the phone.
+  useEffect(() => {
+    if (!floating) return;
+    const place = (): void => {
+      const el = containerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const x = r.left + anchorX * r.width + 12;
+      const y = r.top + anchorY * r.height - 12;
+      setFixedPos({
+        left: Math.min(Math.max(8, x), window.innerWidth - POPOVER_WIDTH - 8),
+        top: Math.min(Math.max(8, y), window.innerHeight - POPOVER_EST_HEIGHT - 8),
+      });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [floating, containerRef, anchorX, anchorY]);
+
+  if (floating && !fixedPos) return null;
+
+  const popover = (
     <div
       ref={popoverRef}
       style={{
-        position: 'absolute',
-        left: `${anchorX * 100}%`,
-        top: `${anchorY * 100}%`,
-        transform: 'translate(12px, -12px)',
-        zIndex: 50,
-        width: 260,
+        ...(floating
+          ? { position: 'fixed' as const, left: fixedPos!.left, top: fixedPos!.top }
+          : {
+              position: 'absolute' as const,
+              left: `${anchorX * 100}%`,
+              top: `${anchorY * 100}%`,
+              transform: 'translate(12px, -12px)',
+            }),
+        zIndex: 200,
+        width: POPOVER_WIDTH,
         background: 'oklch(0.18 0.008 260)',
         border: '1px solid oklch(0.28 0.01 260)',
         borderRadius: 12,
@@ -426,4 +487,6 @@ export function PinPopover({
       </div>
     </div>
   );
+
+  return floating ? createPortal(popover, document.body) : popover;
 }

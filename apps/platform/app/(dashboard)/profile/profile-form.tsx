@@ -86,7 +86,7 @@ export function ProfileForm({ profile }: { profile: Profile }): ReactNode {
               }}
             >
               {isAgency ? 'AGENCY' : 'CUSTOMER'}
-              {profile.flavor ? ` · ${profile.flavor.toUpperCase()}` : ''}
+              {isAgency && profile.flavor ? ` · ${profile.flavor.toUpperCase()}` : ''}
             </span>
           </p>
         </div>

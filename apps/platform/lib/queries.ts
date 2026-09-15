@@ -442,17 +442,37 @@ export const getUnreadOverview = cache(async (
   userId: string,
 ): Promise<{ total: number; byApp: Map<string, number> }> => {
   const supabase = await getSupabaseServerClient();
-  const { data, error } = await supabase
+
+  // Aggregate in the database: one row per app instead of one row per unread
+  // notification. The old version pulled every unread row down and counted
+  // them in JS, which is a needless payload on every dashboard render and
+  // silently undercounts past Supabase's 1000-row default cap.
+  const { data, error } = await supabase.rpc('get_unread_notification_counts', {
+    p_user_id: userId,
+  });
+  if (!error && data) {
+    const byApp = new Map<string, number>();
+    let total = 0;
+    for (const row of data as Array<{ app_id: string; unread: number }>) {
+      const n = Number(row.unread);
+      byApp.set(row.app_id, n);
+      total += n;
+    }
+    return { total, byApp };
+  }
+
+  // Fallback for a database that hasn't had the migration applied yet.
+  const { data: rows, error: rowsErr } = await supabase
     .from('notifications')
     .select('app_id')
     .eq('user_id', userId)
     .is('seen_at', null);
-  if (error || !data) return { total: 0, byApp: new Map() };
+  if (rowsErr || !rows) return { total: 0, byApp: new Map() };
   const byApp = new Map<string, number>();
-  for (const row of data as Array<{ app_id: string }>) {
+  for (const row of rows as Array<{ app_id: string }>) {
     byApp.set(row.app_id, (byApp.get(row.app_id) ?? 0) + 1);
   }
-  return { total: data.length, byApp };
+  return { total: rows.length, byApp };
 });
 
 /** @deprecated — prefer getUnreadOverview. Kept for backwards compatibility. */
