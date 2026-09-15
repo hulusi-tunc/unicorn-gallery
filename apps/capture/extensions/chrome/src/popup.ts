@@ -3,7 +3,21 @@
 // round-trip, which is racy). The popup itself is rendered inside Chrome's
 // native side panel, so it persists while the user clicks around the page.
 
-const CAPTURE_BASE = "http://localhost:9876";
+import {
+	type Backend,
+	DESKTOP_BASE,
+	desktopBackend,
+	galleryBackend,
+	pickBackend,
+} from "./backends";
+import { getGalleryUrl, readSession, signIn, signOut } from "./session";
+
+/**
+ * Where snaps go. Chosen once at load: a gallery session wins, otherwise the
+ * desktop app if it answers, otherwise null and the panel shows sign-in.
+ */
+let backend: Backend | null = null;
+
 const PROJECT_STORAGE_KEY = "uc.lastProjectSlug";
 const FLOW_STORAGE_PREFIX = "uc.lastFlow:";
 const STANDARD_WIDTH = 1440;
@@ -14,29 +28,44 @@ const SCALE = 2;
 // Chrome from OOMing on rapid-fire snaps.
 const INTER_SNAP_THROTTLE_MS = 350;
 
-type Project = { slug: string; name: string; baseUrl?: string };
 type FlowOption = { id: string; name: string; parentFlowId?: string };
 
 const urlEl = document.getElementById("url") as HTMLDivElement;
 const projectEl = document.getElementById("project") as HTMLSelectElement;
-const flowTrigger = document.getElementById("flow-trigger") as HTMLButtonElement;
-const flowLabel = document.getElementById("flow-trigger-label") as HTMLSpanElement;
+const flowTrigger = document.getElementById(
+	"flow-trigger",
+) as HTMLButtonElement;
+const flowLabel = document.getElementById(
+	"flow-trigger-label",
+) as HTMLSpanElement;
 const flowPop = document.getElementById("flow-pop") as HTMLDivElement;
 const flowSearch = document.getElementById("flow-search") as HTMLInputElement;
 const flowList = document.getElementById("flow-list") as HTMLDivElement;
 const statusEl = document.getElementById("status") as HTMLDivElement;
-const viewportBtn = document.getElementById("snap-viewport") as HTMLButtonElement;
-const fullPageBtn = document.getElementById("snap-fullpage") as HTMLButtonElement;
+const viewportBtn = document.getElementById(
+	"snap-viewport",
+) as HTMLButtonElement;
+const fullPageBtn = document.getElementById(
+	"snap-fullpage",
+) as HTMLButtonElement;
 const pdfBtn = document.getElementById("snap-pdf") as HTMLButtonElement;
 const recordBtn = document.getElementById("record-clip") as HTMLButtonElement;
 
 // In-memory flow list for the custom picker. Each row carries its depth so
 // the renderer can draw a tree-indent prefix; ancestors lets us future-proof
 // "show parent breadcrumb on match" if we ever add it.
-let flowOptions: { id: string; name: string; depth: number; ancestors: string[] }[] = [];
+let flowOptions: {
+	id: string;
+	name: string;
+	depth: number;
+	ancestors: string[];
+}[] = [];
 let activeIndex = 0;
 
-function setStatus(message: string, kind: "idle" | "working" | "success" | "error") {
+function setStatus(
+	message: string,
+	kind: "idle" | "working" | "success" | "error",
+) {
 	statusEl.textContent = message;
 	statusEl.className = `status ${kind}`;
 }
@@ -58,14 +87,9 @@ async function readSourceTab(): Promise<chrome.tabs.Tab | null> {
 }
 
 async function loadProjects() {
+	if (!backend) return;
 	try {
-		const res = await fetch(`${CAPTURE_BASE}/web-ext/projects`);
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		const body = (await res.json()) as
-			| { ok: true; projects: Project[] }
-			| { ok: false; error: string };
-		if (!body.ok) throw new Error(body.error);
-		const projects = body.projects;
+		const projects = await backend.listProjects();
 		projectEl.innerHTML = "";
 		if (projects.length === 0) {
 			const opt = document.createElement("option");
@@ -95,10 +119,12 @@ async function loadProjects() {
 		await loadFlowsForCurrentProject();
 	} catch (err) {
 		setStatus(
-			`Can't reach Capture at ${CAPTURE_BASE}. Is the app running?`,
+			backend === desktopBackend
+				? `Can't reach Capture at ${DESKTOP_BASE}. Is the app running?`
+				: `Gallery unreachable: ${(err as Error).message}`,
 			"error",
 		);
-		projectEl.innerHTML = '<option value="">Capture offline</option>';
+		projectEl.innerHTML = '<option value="">Unavailable</option>';
 		projectEl.disabled = true;
 		console.error("loadProjects failed", err);
 	}
@@ -143,7 +169,12 @@ function treeGlyph(depth: number): string {
 	return `${"  ".repeat(depth - 1)}└─`;
 }
 
-type OptionInit = { id: string; name: string; tree: string; isCurrent: boolean };
+type OptionInit = {
+	id: string;
+	name: string;
+	tree: string;
+	isCurrent: boolean;
+};
 
 function makeOption(o: OptionInit): HTMLElement {
 	const el = document.createElement("div");
@@ -186,7 +217,12 @@ function renderFlowList(filter: string): void {
 	const autoMatches = !q || "auto from url".includes(q);
 	if (autoMatches) {
 		flowList.appendChild(
-			makeOption({ id: "", name: "Auto (from URL)", tree: "", isCurrent: current === "" }),
+			makeOption({
+				id: "",
+				name: "Auto (from URL)",
+				tree: "",
+				isCurrent: current === "",
+			}),
 		);
 		if (flowOptions.length > 0) {
 			const div = document.createElement("div");
@@ -266,23 +302,22 @@ async function loadFlowsForCurrentProject(): Promise<void> {
 		setCurrentFlow("", "Auto (from URL)");
 		return;
 	}
+	if (!backend) return;
 	try {
-		const res = await fetch(
-			`${CAPTURE_BASE}/web-ext/flows?projectId=${encodeURIComponent(slug)}`,
-		);
-		const body = (await res.json()) as
-			| { ok: true; flows: FlowOption[] }
-			| { ok: false; error: string };
-		if (!body.ok) throw new Error(body.error);
+		const flows = await backend.listFlows(slug);
 		const byParent = new Map<string | undefined, FlowOption[]>();
-		for (const f of body.flows) {
+		for (const f of flows) {
 			const key = f.parentFlowId ?? undefined;
 			const list = byParent.get(key) ?? [];
 			list.push(f);
 			byParent.set(key, list);
 		}
 		const flat: typeof flowOptions = [];
-		const walk = (parent: string | undefined, depth: number, ancestors: string[]) => {
+		const walk = (
+			parent: string | undefined,
+			depth: number,
+			ancestors: string[],
+		) => {
 			for (const f of byParent.get(parent) ?? []) {
 				flat.push({ id: f.id, name: f.name, depth, ancestors });
 				walk(f.id, depth + 1, [...ancestors, f.id]);
@@ -372,7 +407,11 @@ async function captureViaCdp(
 				scale: 1,
 			};
 		}
-		const shot = (await sendCmd(target, "Page.captureScreenshot", shotParams)) as {
+		const shot = (await sendCmd(
+			target,
+			"Page.captureScreenshot",
+			shotParams,
+		)) as {
 			data: string;
 		};
 		const bytes = base64ToBytes(shot.data);
@@ -415,31 +454,23 @@ async function snap(fullPage: boolean) {
 	viewportBtn.disabled = true;
 	fullPageBtn.disabled = true;
 	pdfBtn.disabled = true;
-	setStatus(fullPage ? "Capturing full page…" : "Capturing viewport…", "working");
+	setStatus(
+		fullPage ? "Capturing full page…" : "Capturing viewport…",
+		"working",
+	);
 	let pngBytes: Uint8Array | null = null;
 	try {
 		pngBytes = await captureViaCdp(tab.id, fullPage);
 		setStatus("Uploading…", "working");
-		const params = new URLSearchParams({
+		if (!backend) throw new Error("No backend available.");
+		const body = await backend.pushSnap({
 			projectId,
 			url: tab.url,
-			fullPage: fullPage ? "1" : "0",
+			title: tab.title,
+			fullPage,
+			flowId: getCurrentFlowId() || undefined,
+			pngBytes,
 		});
-		if (tab.title) params.set("title", tab.title);
-		const flowId = getCurrentFlowId();
-		if (flowId) params.set("flowId", flowId);
-		const res = await fetch(`${CAPTURE_BASE}/web-ext/snap?${params}`, {
-			method: "POST",
-			headers: { "content-type": "image/png" },
-			body: pngBytes,
-		});
-		const body = (await res.json()) as
-			| {
-					ok: true;
-					record: { route: string };
-					placement: { flowName: string; kind: string };
-			  }
-			| { ok: false; error: string };
 		if (!body.ok) {
 			setStatus(body.error, "error");
 			return;
@@ -515,7 +546,10 @@ function buildPdfFilename(tab: chrome.tabs.Tab): string {
 	try {
 		const u = new URL(tab.url ?? "");
 		host = u.hostname.replace(/^www\./, "");
-		path = u.pathname.replace(/^\//, "").replace(/\/$/, "").replace(/[^a-z0-9._-]+/gi, "-");
+		path = u.pathname
+			.replace(/^\//, "")
+			.replace(/\/$/, "")
+			.replace(/[^a-z0-9._-]+/gi, "-");
 	} catch {}
 	const stamp = new Date()
 		.toISOString()
@@ -564,7 +598,8 @@ async function savePdf() {
 	} catch (err) {
 		setStatus(`PDF failed: ${(err as Error).message}`, "error");
 	} finally {
-		if (blobUrl) setTimeout(() => URL.revokeObjectURL(blobUrl as string), 60_000);
+		if (blobUrl)
+			setTimeout(() => URL.revokeObjectURL(blobUrl as string), 60_000);
 		pdfBytes = null;
 		snapInFlight = false;
 		lastSnapAt = Date.now();
@@ -600,7 +635,11 @@ let recordLastFrame: HTMLImageElement | null = null;
 let recordAttached = false;
 let recordPoster: Uint8Array | null = null;
 let recordOnEvent:
-	| ((source: chrome.debugger.Debuggee, method: string, params?: object) => void)
+	| ((
+			source: chrome.debugger.Debuggee,
+			method: string,
+			params?: object,
+	  ) => void)
 	| null = null;
 
 const CURSOR_OVERLAY_INSTALL = `(() => {
@@ -624,7 +663,10 @@ const CURSOR_OVERLAY_INSTALL = `(() => {
 })()`;
 const CURSOR_OVERLAY_REMOVE = `window.__ucCursorCleanup && window.__ucCursorCleanup()`;
 
-function pickRecorderMime(): { mime: string; base: "video/mp4" | "video/webm" } {
+function pickRecorderMime(): {
+	mime: string;
+	base: "video/mp4" | "video/webm";
+} {
 	const ladder: Array<{ mime: string; base: "video/mp4" | "video/webm" }> = [
 		{ mime: 'video/mp4;codecs="avc1.42E01E"', base: "video/mp4" },
 		{ mime: "video/mp4", base: "video/mp4" },
@@ -686,15 +728,16 @@ async function uploadClip(blob: Blob, base: string): Promise<void> {
 	const postClip = async (): Promise<
 		{ ok: true; route: string } | { ok: false; error: string }
 	> => {
-		const params = new URLSearchParams({ projectId, url: info.url });
-		const res = await fetch(`${CAPTURE_BASE}/web-ext/video?${params}`, {
-			method: "POST",
-			headers: { "content-type": base },
-			body: blob,
+		if (!backend) return { ok: false, error: "No backend available." };
+		const res = await backend.pushVideo({
+			projectId,
+			url: info.url,
+			videoBytes: new Uint8Array(await blob.arrayBuffer()),
+			mimeType: base,
 		});
-		return (await res.json()) as
-			| { ok: true; route: string }
-			| { ok: false; error: string };
+		return res.ok
+			? { ok: true, route: res.record.route }
+			: { ok: false, error: res.error };
 	};
 	try {
 		let body = await postClip();
@@ -702,21 +745,13 @@ async function uploadClip(blob: Blob, base: string): Promise<void> {
 			// The page was never snapped — create the snap from the poster we
 			// grabbed at record start, then retry the clip attach once.
 			setStatus("No snap yet — creating one from the recording…", "working");
-			const snapParams = new URLSearchParams({
+			const snapBody = await backend.pushSnap({
 				projectId,
 				url: info.url,
-				fullPage: "0",
+				fullPage: false,
+				flowId: getCurrentFlowId() || undefined,
+				pngBytes: recordPoster,
 			});
-			const flowId = getCurrentFlowId();
-			if (flowId) snapParams.set("flowId", flowId);
-			const snapRes = await fetch(`${CAPTURE_BASE}/web-ext/snap?${snapParams}`, {
-				method: "POST",
-				headers: { "content-type": "image/png" },
-				body: recordPoster,
-			});
-			const snapBody = (await snapRes.json()) as
-				| { ok: true }
-				| { ok: false; error: string };
 			if (!snapBody.ok) {
 				setStatus(`Auto-snap failed: ${snapBody.error}`, "error");
 				return;
@@ -781,7 +816,10 @@ async function startRecording(): Promise<void> {
 		const firstFrame = new Promise<void>((resolve, reject) => {
 			firstFrameResolve = resolve;
 			setTimeout(
-				() => reject(new Error("no frames from the tab — make sure it stays visible")),
+				() =>
+					reject(
+						new Error("no frames from the tab — make sure it stays visible"),
+					),
 				4000,
 			);
 		});
@@ -846,7 +884,8 @@ async function startRecording(): Promise<void> {
 		// emitting during static stretches (captureStream only fires on
 		// canvas changes; without this, still periods produce no frames).
 		recordKeepAlive = setInterval(() => {
-			if (recordCtx && recordLastFrame) recordCtx.drawImage(recordLastFrame, 0, 0);
+			if (recordCtx && recordLastFrame)
+				recordCtx.drawImage(recordLastFrame, 0, 0);
 		}, 200) as unknown as number;
 		// Recording holds the CDP attachment — a snap during recording would
 		// fight over it, so park the snap buttons until we're done.
@@ -898,7 +937,151 @@ chrome.tabs.onUpdated.addListener((_id, info) => {
 });
 chrome.windows.onFocusChanged.addListener(() => void refreshTabDisplay());
 
+/* ── account, backend choice, and creating a project ─────────────────────── */
+
+const authView = document.getElementById("auth") as HTMLDivElement;
+const mainView = document.getElementById("main") as HTMLDivElement;
+const galleryUrlEl = document.getElementById("gallery-url") as HTMLInputElement;
+const emailEl = document.getElementById("email") as HTMLInputElement;
+const passwordEl = document.getElementById("password") as HTMLInputElement;
+const signInBtn = document.getElementById("sign-in") as HTMLButtonElement;
+const authNote = document.getElementById("auth-note") as HTMLDivElement;
+const backendLabel = document.getElementById(
+	"backend-label",
+) as HTMLSpanElement;
+const signOutBtn = document.getElementById("sign-out") as HTMLButtonElement;
+const newProjectBtn = document.getElementById(
+	"new-project",
+) as HTMLButtonElement;
+const newProjectRow = document.getElementById(
+	"new-project-row",
+) as HTMLDivElement;
+const newProjectName = document.getElementById(
+	"new-project-name",
+) as HTMLInputElement;
+const createProjectBtn = document.getElementById(
+	"create-project",
+) as HTMLButtonElement;
+
+function showAuth(note: string, kind: "idle" | "error"): void {
+	authView.hidden = false;
+	mainView.hidden = true;
+	authNote.textContent = note;
+	authNote.className = `status ${kind}`;
+}
+
+function showMain(): void {
+	authView.hidden = true;
+	mainView.hidden = false;
+}
+
+/**
+ * Gallery calls are cross-origin from a chrome-extension:// page, which Chrome
+ * only allows for hosts the extension holds permission for. The permission is
+ * optional in the manifest and asked for here, at the moment the user names
+ * the gallery — so the install itself never demands access to every site.
+ */
+async function ensureHostPermission(rawUrl: string): Promise<boolean> {
+	let origin: string;
+	try {
+		origin = `${new URL(rawUrl).origin}/*`;
+	} catch {
+		return false;
+	}
+	if (await chrome.permissions.contains({ origins: [origin] })) return true;
+	return chrome.permissions.request({ origins: [origin] });
+}
+
+signInBtn.addEventListener("click", async () => {
+	const url = galleryUrlEl.value.trim();
+	const email = emailEl.value.trim();
+	const password = passwordEl.value;
+	if (!url || !email || !password) {
+		showAuth("Gallery URL, email and password are all needed.", "error");
+		return;
+	}
+	signInBtn.disabled = true;
+	authNote.textContent = "Signing in…";
+	authNote.className = "status working";
+	try {
+		if (!(await ensureHostPermission(url))) {
+			showAuth("Chrome needs permission to reach that gallery.", "error");
+			return;
+		}
+		await signIn(url, email, password);
+		passwordEl.value = "";
+		await boot();
+	} catch (err) {
+		showAuth((err as Error).message, "error");
+	} finally {
+		signInBtn.disabled = false;
+	}
+});
+
+signOutBtn.addEventListener("click", async () => {
+	await signOut();
+	await boot();
+});
+
+newProjectBtn.addEventListener("click", () => {
+	newProjectRow.hidden = !newProjectRow.hidden;
+	if (!newProjectRow.hidden) newProjectName.focus();
+});
+
+newProjectName.addEventListener("keydown", (ev) => {
+	if (ev.key === "Enter") createProjectBtn.click();
+	if (ev.key === "Escape") newProjectRow.hidden = true;
+});
+
+createProjectBtn.addEventListener("click", async () => {
+	const name = newProjectName.value.trim();
+	if (!name || !backend?.createProject) return;
+	createProjectBtn.disabled = true;
+	setStatus(`Creating "${name}"…`, "working");
+	try {
+		const project = await backend.createProject(name);
+		newProjectName.value = "";
+		newProjectRow.hidden = true;
+		await loadProjects();
+		projectEl.value = project.slug;
+		void chrome.storage.local.set({ [PROJECT_STORAGE_KEY]: project.slug });
+		await loadFlowsForCurrentProject();
+		setStatus(`Created "${project.name}". Snap away.`, "success");
+	} catch (err) {
+		setStatus((err as Error).message, "error");
+	} finally {
+		createProjectBtn.disabled = false;
+	}
+});
+
+async function boot(): Promise<void> {
+	backend = await pickBackend();
+
+	if (!backend) {
+		galleryUrlEl.value = (await getGalleryUrl()) || galleryUrlEl.value;
+		showAuth(
+			"Sign in to the gallery, or start the Capture desktop app.",
+			"idle",
+		);
+		return;
+	}
+
+	showMain();
+	const session = await readSession();
+	backendLabel.textContent =
+		backend === galleryBackend && session
+			? `Gallery · ${session.email}`
+			: backend.label;
+	// Signing out only makes sense when there is a session to drop; on the
+	// desktop path the row is just a label.
+	signOutBtn.hidden = backend !== galleryBackend;
+	newProjectBtn.hidden = !backend.canCreateProjects;
+	newProjectRow.hidden = true;
+
+	await loadProjects();
+}
+
 void (async () => {
 	await refreshTabDisplay();
-	await loadProjects();
+	await boot();
 })();

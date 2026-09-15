@@ -57,7 +57,11 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + '/')) ||
     path.startsWith('/_next') ||
     path.startsWith('/api/captures') || // intake API has its own bearer auth
-    path.startsWith('/api/projects'); // init CLI flow has its own bearer auth
+    path.startsWith('/api/projects') || // init CLI flow has its own bearer auth
+    // Public bootstrap for the Chrome extension: it has no session yet, which
+    // is the whole reason it is asking. Serves two already-public values and
+    // reads nothing, so there is nothing here for a session to protect.
+    path === '/api/ext/config';
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

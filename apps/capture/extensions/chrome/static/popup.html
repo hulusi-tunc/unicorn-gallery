@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Unicorn Capture</title>
+		<link rel="stylesheet" href="popup.css" />
+	</head>
+	<body>
+		<header class="head">
+			<img src="icons/32.png" alt="" />
+			<h1>Unicorn Capture</h1>
+		</header>
+
+		<!-- Shown when there is neither a gallery session nor a running desktop
+		     app. The extension works on its own from here: sign in and it talks
+		     to the gallery's intake API directly. -->
+		<div id="auth" hidden>
+			<div class="field">
+				<label class="field-label" for="gallery-url">Gallery URL</label>
+				<input
+					type="url"
+					id="gallery-url"
+					class="control"
+					placeholder="https://gallery.example.com"
+					autocomplete="url"
+				/>
+			</div>
+			<div class="field">
+				<label class="field-label" for="email">Email</label>
+				<input type="email" id="email" class="control" autocomplete="username" />
+			</div>
+			<div class="field">
+				<label class="field-label" for="password">Password</label>
+				<input
+					type="password"
+					id="password"
+					class="control"
+					autocomplete="current-password"
+				/>
+			</div>
+			<button type="button" id="sign-in" class="btn btn-primary">Sign in</button>
+			<div id="auth-note" class="status idle" role="status" aria-live="polite"></div>
+		</div>
+
+		<div id="main" hidden>
+			<!-- Where snaps are going. Never a mystery which backend is live. -->
+			<div class="backend-row">
+				<span id="backend-label"></span>
+				<button type="button" id="sign-out" class="link-btn" hidden>Sign out</button>
+			</div>
+
+			<!-- The page the next snap will hit. popup.ts keeps this in step with
+			     the main window as the user navigates and switches tabs. -->
+			<div id="url">(no active tab)</div>
+
+		<div class="field">
+			<div class="label-row">
+				<label class="field-label" for="project">Project</label>
+				<button type="button" id="new-project" class="link-btn" hidden>+ New</button>
+			</div>
+			<select id="project" class="control" disabled>
+				<option value="">Loading…</option>
+			</select>
+			<div id="new-project-row" class="new-project-row" hidden>
+				<input
+					type="text"
+					id="new-project-name"
+					class="control"
+					placeholder="Project name"
+					aria-label="New project name"
+				/>
+				<button type="button" id="create-project" class="btn btn-secondary">
+					Create
+				</button>
+			</div>
+		</div>
+
+		<div class="field">
+			<span class="field-label" id="flow-label">Flow</span>
+			<!-- #flow-combo is load-bearing: the click-outside handler in
+			     popup.ts keeps the popover open for clicks inside it. -->
+			<div id="flow-combo">
+				<button
+					type="button"
+					id="flow-trigger"
+					aria-haspopup="listbox"
+					aria-labelledby="flow-label flow-trigger-label"
+					data-value=""
+					disabled
+				>
+					<span id="flow-trigger-label">Auto (from URL)</span>
+				</button>
+				<div id="flow-pop" hidden>
+					<input
+						type="text"
+						id="flow-search"
+						placeholder="Search flows…"
+						aria-label="Search flows"
+						autocomplete="off"
+					/>
+					<div id="flow-list" role="listbox" aria-labelledby="flow-label"></div>
+				</div>
+			</div>
+		</div>
+
+		<div class="actions">
+			<button type="button" id="snap-fullpage" class="btn btn-primary" disabled>
+				Snap full page
+			</button>
+			<div class="btn-row">
+				<button type="button" id="snap-viewport" class="btn btn-secondary" disabled>
+					Viewport
+				</button>
+				<button type="button" id="snap-pdf" class="btn btn-secondary" disabled>
+					PDF
+				</button>
+			</div>
+			<button type="button" id="record-clip" class="btn btn-secondary" disabled>
+				Record clip · 60s max
+			</button>
+		</div>
+
+		<!-- popup.ts rewrites className to `status <kind>`, so the base class
+		     has to be the first token and nothing else may live here. -->
+			<div id="status" class="status idle" role="status" aria-live="polite">
+				Starting…
+			</div>
+		</div>
+
+		<script type="module" src="popup.js"></script>
+	</body>
+</html>
