@@ -1,5 +1,5 @@
 export { defineConfig } from './config.js';
-export { defineFlow } from './flows/define.js';
+export { defineFlow, defineFlows, type FlowMeta } from './flows/define.js';
 export type {
   GalleryConfig,
   Manifest,
@@ -7,6 +7,7 @@ export type {
   ManifestFrame,
   Platform,
   FlowSnapContext,
+  SnapOptions,
   FlowRunFn,
   PlaywrightFlowDefinition,
 } from './types.js';

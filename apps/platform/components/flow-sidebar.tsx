@@ -35,10 +35,13 @@ export function FlowSidebar({
   manifest,
   appSlug,
   unreadByFlow,
+  canOrganise = false,
 }: {
   manifest: Manifest;
   appSlug: string;
   unreadByFlow?: Map<string, number>;
+  /** Studio members get the structure editor; customers never see it. */
+  canOrganise?: boolean;
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
@@ -49,6 +52,9 @@ export function FlowSidebar({
   // version stays scoped to that version.
   const versionQuery = versionParam ? `?v=${versionParam}` : '';
   const segs = pathname.split('/').filter(Boolean);
+  // The structure editor draws its own flow tree — a second copy of the same
+  // list beside it reads as a bug, so the browse sidebar stands down there.
+  const onOrganise = segs[segs.length - 1] === 'organise';
   const activeFlowId = segs.length >= 3 ? decodeURIComponent(segs[2] ?? '') : '';
   // "on overview" = exactly /app/<slug> — we use this to decide whether
   // a sidebar click should smooth-scroll in place vs route back to the
@@ -108,6 +114,8 @@ export function FlowSidebar({
   // Hide sidebar entirely on Screens tab (Mobbin shows full-width grid)
   if (isScreensTab) return null;
 
+  if (onOrganise) return null;
+
   return (
     <aside
       style={{
@@ -127,7 +135,14 @@ export function FlowSidebar({
       }}
     >
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 20, padding: '6px 20px 10px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 20,
+          padding: '6px 20px 10px',
+        }}
+      >
         {(['screens', 'flows'] as const).map((tab) => {
           const tabParam = searchParams?.get('tab');
           const isActive = tab === 'flows' ? tabParam !== 'screens' : tabParam === 'screens';
@@ -164,6 +179,22 @@ export function FlowSidebar({
             </Link>
           );
         })}
+        {canOrganise ? (
+          <Link
+            href={`/app/${encodeURIComponent(appSlug)}/organise`}
+            style={{
+              marginLeft: 'auto',
+              fontFamily: editorialFonts.body,
+              fontSize: 12,
+              color: t.textSecondary,
+              textDecoration: 'none',
+              paddingBottom: 8,
+            }}
+            title="Rename, reorder and delete screens"
+          >
+            Organise
+          </Link>
+        ) : null}
       </div>
 
       {/* Search */}

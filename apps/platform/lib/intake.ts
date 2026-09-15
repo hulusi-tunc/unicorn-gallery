@@ -328,13 +328,30 @@ export async function ingestCapture({
     }
   }
 
-  // 3. Refresh app preview image (first flow's first frame).
-  const firstFrame = newFlows[0]?.frames[0];
+  // 3. Refresh app preview image (first frame of the first flow that has one).
+  //
+  // Skips flows with no frames of their own: a capture that opens with a
+  // section container would otherwise leave the grid with no preview at all.
+  //
+  // Only the opening request of a push may set it. A push can arrive as
+  // several requests, and without this guard each one overwrites the preview,
+  // so whichever chunk happens to land last decides what the project looks
+  // like in the grid — which is how a project ends up previewing its privacy
+  // policy. `replace` marks the opening request of a full push; an append onto
+  // a project that has no preview yet still gets one.
+  const firstFrame = newFlows.find((f) => f.frames.length > 0)?.frames[0];
   if (firstFrame) {
-    await admin
+    const { data: appRow } = await admin
       .from('apps')
-      .update({ preview_image_url: firstFrame.image })
-      .eq('id', appId);
+      .select('preview_image_url')
+      .eq('id', appId)
+      .maybeSingle();
+    if (replace || !appRow?.preview_image_url) {
+      await admin
+        .from('apps')
+        .update({ preview_image_url: firstFrame.image })
+        .eq('id', appId);
+    }
   }
 
   // 4. Upsert frame rows so comments persist across builds. After upsert
@@ -353,11 +370,21 @@ export async function ingestCapture({
   // old A-row still exists from a previous push — so the gallery ends up
   // showing the same snap in both flows. For every frame_id in this batch,
   // delete rows in the same app whose flow_id doesn't match the incoming
-  // assignment. Scoped to the frame_ids in this batch so we never touch
-  // frames that just happen not to be in the current upload chunk.
+  // assignment.
+  //
+  // Only rows belonging to a flow THIS batch carries are eligible. A frame id
+  // is only unique within its flow, so two flows may legitimately both own a
+  // `filters` snap; without this guard the batch carrying one of them would
+  // read the other as a leftover of a move and delete it. That is invisible in
+  // a single-request push (both flows arrive together) and deletes real frames
+  // as soon as the push is chunked. A genuine move is still caught: the frame's
+  // old flow is itself in some batch, and when that batch lands the row is
+  // stale by the same test.
   const incomingFrameIds = new Set<string>();
   const incomingPairs = new Set<string>();
+  const incomingFlowIds = new Set<string>();
   for (const flow of newFlows) {
+    incomingFlowIds.add(flow.id);
     for (const frame of flow.frames) {
       incomingFrameIds.add(frame.id);
       incomingPairs.add(`${flow.id}::${frame.id}`);
@@ -371,6 +398,7 @@ export async function ingestCapture({
       .in('frame_id', Array.from(incomingFrameIds));
     const staleIds: string[] = [];
     for (const row of existing ?? []) {
+      if (!incomingFlowIds.has(row.flow_id)) continue;
       if (!incomingPairs.has(`${row.flow_id}::${row.frame_id}`)) {
         staleIds.push(row.id);
       }

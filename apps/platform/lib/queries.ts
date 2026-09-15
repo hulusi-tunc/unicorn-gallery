@@ -783,9 +783,10 @@ export const getManifestForApp = cache(async (
   if (buildId) {
     return getManifestForBuild(appId, buildId);
   }
-  const [latestBuild, frames] = await Promise.all([
+  const [latestBuild, frames, overrides] = await Promise.all([
     getLatestBuild(appId),
     listFramesForApp(appId),
+    readStructureOverrides(appId),
   ]);
   if (frames.length === 0) return null;
 
@@ -816,21 +817,39 @@ export const getManifestForApp = cache(async (
       frames: Frame[];
     }
   >();
-  for (const f of visibleFrames) {
-    let g = byFlow.get(f.flow_id);
+  for (const raw of visibleFrames) {
+    // A web edit is applied here, on the way out, so the intake never has to
+    // know it happened. See db/schema.sql's note on the override tables.
+    const fo = overrides.frames.get(`${raw.flow_id}::${raw.frame_id}`);
+    if (fo?.hidden) continue;
+    const f: Frame = fo
+      ? {
+          ...raw,
+          frame_name: fo.name ?? raw.frame_name,
+          frame_position: fo.position ?? raw.frame_position,
+        }
+      : raw;
+    // A moved screen shows under its new flow but keeps its captured identity,
+    // so its comments and version history follow it across.
+    const renderFlowId = fo?.move_to_flow_id ?? f.flow_id;
+
+    let g = byFlow.get(renderFlowId);
     if (!g) {
+      const sameFlow = renderFlowId === f.flow_id;
       g = {
-        id: f.flow_id,
-        name: f.flow_name,
-        parentFlowId: f.parent_flow_id,
-        position: f.flow_position ?? null,
+        id: renderFlowId,
+        name: sameFlow ? f.flow_name : renderFlowId,
+        parentFlowId: sameFlow ? f.parent_flow_id : null,
+        position: sameFlow ? (f.flow_position ?? null) : null,
         frames: [],
       };
-      byFlow.set(f.flow_id, g);
-    } else if (g.parentFlowId == null && f.parent_flow_id) {
+      byFlow.set(renderFlowId, g);
+    } else if (g.parentFlowId == null && renderFlowId === f.flow_id && f.parent_flow_id) {
       g.parentFlowId = f.parent_flow_id;
     }
-    if (g.position == null && f.flow_position != null) g.position = f.flow_position;
+    if (g.position == null && renderFlowId === f.flow_id && f.flow_position != null) {
+      g.position = f.flow_position;
+    }
     g.frames.push(f);
   }
 
@@ -864,6 +883,60 @@ export const getManifestForApp = cache(async (
     }
   }
 
+  // Flows invented in the gallery have no frames until screens are moved into
+  // them, so nothing above would have created them.
+  for (const [flowId, fo] of overrides.flows) {
+    if (!fo.created_on_web || byFlow.has(flowId)) continue;
+    byFlow.set(flowId, {
+      id: flowId,
+      name: fo.name ?? flowId,
+      parentFlowId: null,
+      position: null,
+      frames: [],
+    });
+  }
+
+  // Flow-level edits, after every flow exists so a re-parent can point at one
+  // that was itself only just created.
+  for (const g of byFlow.values()) {
+    const fo = overrides.flows.get(g.id);
+    if (!fo) continue;
+    if (fo.name != null) g.name = fo.name;
+    if (fo.clear_parent) g.parentFlowId = null;
+    else if (fo.parent_flow_id != null) g.parentFlowId = fo.parent_flow_id;
+    if (fo.position != null) g.position = fo.position;
+  }
+
+  // Hiding a flow hides what sits under it — a visible child of a deleted
+  // parent would reappear at the top level, which reads as a bug.
+  const hiddenFlowIds = new Set(
+    Array.from(overrides.flows.entries())
+      .filter(([, fo]) => fo.hidden)
+      .map(([id]) => id),
+  );
+  const isUnderHidden = (id: string): boolean => {
+    const seen = new Set<string>();
+    let cur: string | null | undefined = id;
+    while (cur && !seen.has(cur)) {
+      if (hiddenFlowIds.has(cur)) return true;
+      seen.add(cur);
+      cur = byFlow.get(cur)?.parentFlowId ?? null;
+    }
+    return false;
+  };
+  for (const id of Array.from(byFlow.keys())) {
+    if (isUnderHidden(id)) byFlow.delete(id);
+  }
+
+  // Frames carry their own order within a flow; a drag in the grid writes it.
+  for (const g of byFlow.values()) {
+    g.frames.sort(
+      (a, b) =>
+        (a.frame_position ?? Number.POSITIVE_INFINITY) -
+        (b.frame_position ?? Number.POSITIVE_INFINITY),
+    );
+  }
+
   return {
     projectId: '',
     buildSha: latestBuild?.sha ?? '',
@@ -876,12 +949,67 @@ export const getManifestForApp = cache(async (
       frames: g.frames.map((f) => ({
         id: f.frame_id,
         name: f.frame_name,
+        // Only when it differs, so nothing downstream has to special-case the
+        // ordinary case of a frame sitting where it was captured.
+        originFlowId: f.flow_id === g.id ? undefined : f.flow_id,
         image: f.latest_image_url ?? '',
         video: f.latest_video_url ?? undefined,
       })),
     })),
   };
 });
+
+export interface FlowOverride {
+  flow_id: string;
+  name: string | null;
+  parent_flow_id: string | null;
+  clear_parent: boolean;
+  position: number | null;
+  hidden: boolean;
+  created_on_web: boolean;
+}
+
+export interface FrameOverride {
+  flow_id: string;
+  frame_id: string;
+  name: string | null;
+  move_to_flow_id: string | null;
+  position: number | null;
+  hidden: boolean;
+}
+
+/** The gallery-side structure edits for a project, keyed for lookup. */
+export const readStructureOverrides = cache(
+  async (
+    appId: string,
+  ): Promise<{
+    flows: Map<string, FlowOverride>;
+    frames: Map<string, FrameOverride>;
+  }> => {
+    const supabase = await getSupabaseServerClient();
+    const [{ data: flowRows }, { data: frameRows }] = await Promise.all([
+      supabase
+        .from('flow_overrides')
+        .select('flow_id, name, parent_flow_id, clear_parent, position, hidden, created_on_web')
+        .eq('app_id', appId),
+      supabase
+        .from('frame_overrides')
+        .select('flow_id, frame_id, name, move_to_flow_id, position, hidden')
+        .eq('app_id', appId),
+    ]);
+    return {
+      flows: new Map(
+        ((flowRows ?? []) as FlowOverride[]).map((r) => [r.flow_id, r]),
+      ),
+      frames: new Map(
+        ((frameRows ?? []) as FrameOverride[]).map((r) => [
+          `${r.flow_id}::${r.frame_id}`,
+          r,
+        ]),
+      ),
+    };
+  },
+);
 
 /**
  * Order flows for display by their capture-assigned position. Grouping flows

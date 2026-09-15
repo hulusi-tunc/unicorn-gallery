@@ -1,17 +1,25 @@
-// Bundle the extension's popup + background-service-worker TypeScript
-// into plain JS that Chrome can load as an unpacked extension.
+// Build the unpacked Chrome extension into dist/.
+//
+// Two halves land there: the TypeScript in src/ bundled to plain JS, and the
+// static shell in static/ (manifest, side-panel HTML + CSS, icons) copied
+// across verbatim.
+//
+// The shell used to live in dist/ directly, which is in .gitignore — so it was
+// never committed, and a clean clone could not produce an extension Chrome
+// would load at all. Keeping it in static/ is what makes this reproducible.
+//
 // Run: bun extensions/chrome/build.ts
 
-import { rm } from "node:fs/promises";
+import { cp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outdir = join(here, "dist");
 
-// Wipe only the built JS — leave manifest.json + popup.html + any icons.
-await rm(join(outdir, "popup.js"), { force: true });
-await rm(join(outdir, "background.js"), { force: true });
+// A full wipe, now that everything in dist/ is reproducible from source.
+await rm(outdir, { recursive: true, force: true });
+await cp(join(here, "static"), outdir, { recursive: true });
 
 const result = await Bun.build({
 	entrypoints: [join(here, "src/popup.ts"), join(here, "src/background.ts")],
@@ -28,5 +36,5 @@ if (!result.success) {
 	process.exit(1);
 }
 
-console.log(`Built ${result.outputs.length} files → ${outdir}`);
+console.log(`Built ${result.outputs.length} files + the static shell → ${outdir}`);
 for (const o of result.outputs) console.log(`  ${o.path}`);

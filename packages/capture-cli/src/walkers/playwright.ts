@@ -65,7 +65,7 @@ async function captureRoute(
       waitUntil: config.waitUntil ?? 'networkidle',
       timeout: config.navigationTimeoutMs ?? 15_000,
     });
-    await page.screenshot({ path: screenshotPath, fullPage: true });
+    await page.screenshot({ path: screenshotPath, fullPage: config.fullPage ?? true });
     log(`[walker]   ✓ ${route.pathname}`);
     return {
       id,

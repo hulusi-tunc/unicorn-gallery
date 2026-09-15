@@ -112,7 +112,12 @@ export default async function AppLayout({
       <VersionBanner />
       <div className="mx-auto flex w-full max-w-[1600px] flex-1 gap-0 px-6 lg:px-10 xl:px-16">
         {manifest ? (
-          <FlowSidebar manifest={manifest} appSlug={app.slug} unreadByFlow={unresolvedByFlow} />
+          <FlowSidebar
+            manifest={manifest}
+            appSlug={app.slug}
+            unreadByFlow={unresolvedByFlow}
+            canOrganise={canEdit}
+          />
         ) : null}
         <div className="flex flex-1">{children}</div>
       </div>

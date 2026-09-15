@@ -12,6 +12,9 @@ export async function withPlaywrightSession<T>(
   try {
     const context = await browser.newContext({
       viewport: config.viewport ?? DEFAULT_VIEWPORT,
+      ...(config.deviceScaleFactor
+        ? { deviceScaleFactor: config.deviceScaleFactor }
+        : {}),
     });
     const page = await context.newPage();
     if (config.auth) {

@@ -223,6 +223,13 @@ export interface ManifestFlowSnapshot {
 export interface ManifestFrameSnapshot {
   id: string;
   name: string;
+  /**
+   * The flow this frame was captured under, when that differs from the flow it
+   * now renders in because someone moved it in the gallery. The override
+   * tables key on where a frame came FROM, so the editor needs it to address
+   * the screen; everything else can ignore it.
+   */
+  originFlowId?: string;
   /** Index within the flow (smaller = earlier). */
   position?: number;
   image: string;
