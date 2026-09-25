@@ -18,14 +18,20 @@ export function useTheme(): ThemeContextValue {
   return useContext(ThemeContext);
 }
 
-const STORAGE_KEY = 'unicorn-studio-theme';
+// Brand-neutral: the key is visible in every page's source, and a
+// white-labelled client must not find the studio's name there.
+const STORAGE_KEY = 'gallery-theme';
+/** Where the theme lived before; read once so nobody's choice resets. */
+const LEGACY_STORAGE_KEY = 'unicorn-studio-theme';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
+    const stored = (localStorage.getItem(STORAGE_KEY) ??
+      localStorage.getItem(LEGACY_STORAGE_KEY)) as Theme | null;
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
     const initial =
       stored ??
       (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
