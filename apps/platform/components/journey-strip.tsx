@@ -137,6 +137,7 @@ function JourneyCard({
             alt={frame.name}
             width={WEB_CARD_WIDTH}
             height={WEB_CARD_HEIGHT}
+            elevated
           />
         )}
       </div>

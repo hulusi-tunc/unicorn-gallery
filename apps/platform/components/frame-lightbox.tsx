@@ -2,6 +2,7 @@
 
 import { Maximize2, X } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { BrowserFrame } from '@/components/browser-frame';
 
 /**
  * Wraps a frame thumbnail and, on click, opens a full-screen overlay showing
@@ -77,14 +78,23 @@ export function FrameLightbox({
           </div>
 
           <div className="flex justify-center px-4 pb-16 pt-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={src}
-              alt={name}
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: isMobile ? 420 : 1200 }}
-              className="h-auto w-full rounded-lg bg-white shadow-2xl"
-            />
+            {isMobile ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={src}
+                alt={name}
+                onClick={(e) => e.stopPropagation()}
+                style={{ maxWidth: 420 }}
+                className="h-auto w-full rounded-lg bg-white shadow-2xl"
+              />
+            ) : (
+              <div onClick={(e) => e.stopPropagation()} className="w-full" style={{ maxWidth: 1200 }}>
+                <BrowserFrame size="lg" address={name} elevated>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt={name} className="block h-auto w-full" />
+                </BrowserFrame>
+              </div>
+            )}
           </div>
         </div>
       ) : null}

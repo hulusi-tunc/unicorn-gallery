@@ -2,10 +2,12 @@
 
 import { FileText, Play } from 'lucide-react';
 import { useState } from 'react';
+import { BrowserFrame } from '@/components/browser-frame';
 
 /**
- * Thumbnail for a web frame card. Fills its parent container, detects
- * tall/full-page snaps and shows indicators.
+ * Thumbnail for a web frame card, inside a small browser window so a white
+ * screenshot keeps its edge on a white page. Fills its parent container,
+ * detects tall/full-page snaps and shows indicators.
  */
 export function WebCardThumb({
   src,
@@ -13,19 +15,24 @@ export function WebCardThumb({
   width,
   height,
   hasVideo,
+  elevated = false,
 }: {
   src: string;
   alt: string;
   width?: number;
   height?: number;
   hasVideo?: boolean;
+  /** Lift the window with a shadow. Leave off inside a tile that clips it. */
+  elevated?: boolean;
 }): React.ReactNode {
   const [isFullPage, setIsFullPage] = useState(false);
 
   return (
-    <div
-      style={{ width: width ?? '100%', height: height ?? '100%', position: 'relative' }}
-      className="overflow-hidden rounded-md bg-neutral-50 transition-all dark:bg-neutral-900"
+    <BrowserFrame
+      size="sm"
+      elevated={elevated}
+      style={{ width: width ?? '100%', height: height ?? '100%' }}
+      className="transition-shadow"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -73,6 +80,6 @@ export function WebCardThumb({
           <Play size={13} fill="currentColor" />
         </span>
       ) : null}
-    </div>
+    </BrowserFrame>
   );
 }

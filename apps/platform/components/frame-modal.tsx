@@ -11,6 +11,7 @@ const CommentsPanel = dynamic(
   () => import('@/components/comments-panel').then((m) => ({ default: m.CommentsPanel })),
   { ssr: false, loading: () => <div className="flex-1 animate-pulse rounded-2xl bg-white/5" /> },
 );
+import { BrowserFrame } from '@/components/browser-frame';
 import { DeviceBezel } from '@/components/device-bezel';
 import { ZoomStage } from '@/components/zoom-stage';
 import { MarkFrameRead } from '@/components/mark-frame-read';
@@ -64,6 +65,7 @@ export function FrameModal({
 }): ReactNode {
   const router = useRouter();
   const isMobile = platform !== 'web';
+  const address = `${appSlug} / ${flow.name}`;
   const [copied, setCopied] = useState(false);
   const [pendingPin, setPendingPin] = useState<PinDraft | null>(null);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
@@ -263,7 +265,20 @@ export function FrameModal({
             dragToPan={isMobile && !videoSrc && readOnly}
             maxWidth={1100}
           >
-                {videoSrc ? (
+                {videoSrc && !isMobile ? (
+                  <BrowserFrame size="lg" address={address} elevated>
+                    <video
+                      src={videoSrc}
+                      poster={src}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      controls
+                      className="block h-auto w-full"
+                    />
+                  </BrowserFrame>
+                ) : videoSrc ? (
                   <div className="overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
                     <video
                       src={videoSrc}
@@ -318,29 +333,34 @@ export function FrameModal({
                     )}
                   />
                 ) : (
-                  <div className="w-full" ref={pinContainerRef}>
-                    <PinOverlay
-                      comments={comments}
-                      activeCommentId={activeCommentId}
-                      onPinPlace={handlePinPlace}
-                      onPinClick={handlePinClick}
-                      readOnly={readOnly}
-                    >
-                      <div className="overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
+                  /* The window chrome sits outside the pin overlay, so pins
+                     still normalise against the screenshot alone and every
+                     comment placed before the frame existed stays put. The
+                     content is left unclipped for the pin popover, so the
+                     image rounds its own bottom corners. */
+                  <BrowserFrame size="lg" address={address} elevated clipContent={false} className="w-full">
+                    <div className="w-full" ref={pinContainerRef}>
+                      <PinOverlay
+                        comments={comments}
+                        activeCommentId={activeCommentId}
+                        onPinPlace={handlePinPlace}
+                        onPinClick={handlePinClick}
+                        readOnly={readOnly}
+                      >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={src} alt={frameName} className="h-auto w-full" />
-                      </div>
-                      {pendingPin && (
-                        <PinPopover
-                          pin={pendingPin}
-                          containerRef={pinContainerRef}
-                          onSubmit={handlePinSubmit}
-                          onCancel={handlePinCancel}
-                          mentionables={mentionables}
-                        />
-                      )}
-                    </PinOverlay>
-                  </div>
+                        <img src={src} alt={frameName} className="block h-auto w-full rounded-b-xl" />
+                        {pendingPin && (
+                          <PinPopover
+                            pin={pendingPin}
+                            containerRef={pinContainerRef}
+                            onSubmit={handlePinSubmit}
+                            onCancel={handlePinCancel}
+                            mentionables={mentionables}
+                          />
+                        )}
+                      </PinOverlay>
+                    </div>
+                  </BrowserFrame>
                 )}
           </ZoomStage>
         </div>

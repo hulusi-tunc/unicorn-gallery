@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { DeviceBezel } from '@/components/device-bezel';
 import { UnresolvedBadge } from '@/components/unresolved-badge';
+import { BrowserFrame } from '@/components/browser-frame';
 import { WebCardThumb } from '@/components/web-card-thumb';
 import { imageHref } from '@/lib/image-href';
 import type { FrameUnresolvedSummary } from '@/lib/queries';
@@ -185,7 +186,7 @@ function FlowStripCard({
             />
           </div>
         ) : (
-          <>
+          <BrowserFrame size="sm" fill>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={src}
@@ -208,16 +209,15 @@ function FlowStripCard({
                 className={`absolute inset-0 h-full w-full object-cover object-top ${hovering ? 'visible' : 'invisible'}`}
               />
             ) : null}
-          </>
+            {isFullPage ? (
+              <span className="absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-[13px] font-medium text-white backdrop-blur-sm">
+                <FileText size={13} />
+                Full page
+              </span>
+            ) : null}
+          </BrowserFrame>
         )}
 
-        {/* Full-page badge */}
-        {isFullPage && !isMobile ? (
-          <span className="absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-[13px] font-medium text-white backdrop-blur-sm">
-            <FileText size={13} />
-            Full page
-          </span>
-        ) : null}
 
         {/* Video badge */}
         {videoSrc ? (
