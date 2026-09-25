@@ -1,6 +1,8 @@
 // Database row types — the shape of our public.* tables.
 // Supabase client returns these via `.from('table').select<...>()`.
 
+import type { BrandId } from '@/lib/brand';
+
 export type Role = 'agency' | 'customer';
 export type Platform = 'web' | 'ios' | 'android';
 
@@ -22,6 +24,8 @@ export interface AppRow {
   icon_url: string | null;
   preview_image_url: string | null;
   accent_color: string | null;
+  /** Client-facing brand; see lib/brand.ts. */
+  brand: BrandId;
   platform: Platform;
   created_by: string | null;
   created_at: string;

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { nanoid } from 'nanoid';
 import { getCurrentProfile } from '@/lib/queries';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
+import { BRANDS, isBrandId } from '@/lib/brand';
 
 async function requireAgency(): Promise<{ id: string } | { error: string }> {
   const profile = await getCurrentProfile();
@@ -120,7 +121,12 @@ export async function inviteCustomer(
   if (linkErr) return { error: linkErr.message };
 
   revalidatePath(`/app/${input.appSlug}`);
-  const signInUrl = `${getSiteUrl()}/sign-in?email=${encodeURIComponent(email)}&next=${encodeURIComponent(`/app/${input.appSlug}`)}`;
+  // A white-labelled project's client signs in on its brand's host, so the
+  // credentials the PM hands over never carry the Unicorn address.
+  const { data: appRow } = await admin.from('apps').select('brand').eq('id', input.appId).maybeSingle();
+  const brandId = isBrandId(appRow?.brand) ? appRow.brand : 'unicorn';
+  const origin = brandId === 'unicorn' ? getSiteUrl() : BRANDS[brandId].origin;
+  const signInUrl = `${origin}/sign-in?email=${encodeURIComponent(email)}&next=${encodeURIComponent(`/app/${input.appSlug}`)}`;
   return {
     ok: true,
     created,

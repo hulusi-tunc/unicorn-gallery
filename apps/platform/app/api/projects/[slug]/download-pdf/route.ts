@@ -19,6 +19,7 @@ import {
 } from 'pdf-lib';
 import type { Platform } from '@/lib/db';
 import { chooseBezel, type BezelSpec } from '@/lib/bezel-specs';
+import { BRANDS, isBrandId } from '@/lib/brand';
 import {
   getAppBySlug,
   getBuildByVersion,
@@ -110,7 +111,7 @@ export async function GET(
 
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${app.name} — Screens`);
-  pdf.setCreator('Unicorn Studio Gallery');
+  pdf.setCreator(BRANDS[isBrandId(app.brand) ? app.brand : 'unicorn'].productName);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
 

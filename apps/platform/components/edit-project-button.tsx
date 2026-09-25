@@ -16,8 +16,10 @@ import { useTheme } from '@/components/providers/theme-provider';
 import {
   removeProjectIcon,
   renameProject,
+  setProjectBrand,
   uploadProjectIcon,
 } from '@/lib/actions/update-project';
+import { BRAND_IDS, BRANDS, type BrandId } from '@/lib/brand';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
 interface Props {
@@ -25,6 +27,8 @@ interface Props {
   appName: string;
   iconUrl: string | null;
   accent: string;
+  /** Brand the project's client sees; see lib/brand.ts. */
+  brand: BrandId;
   canEdit: boolean;
   /** Rendered icon size in px (default 28). The hero uses a larger size. */
   size?: number;
@@ -35,6 +39,7 @@ export function EditProjectButton({
   appName,
   iconUrl,
   accent,
+  brand,
   canEdit,
   size = 28,
 }: Props): ReactNode {
@@ -44,6 +49,7 @@ export function EditProjectButton({
 
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState(appName);
+  const [draftBrand, setDraftBrand] = useState<BrandId>(brand);
   const [optimisticIcon, setOptimisticIcon] = useState<string | null>(iconUrl);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -65,6 +71,9 @@ export function EditProjectButton({
   useEffect(() => {
     setDraftName(appName);
   }, [appName]);
+  useEffect(() => {
+    setDraftBrand(brand);
+  }, [brand]);
   useEffect(() => {
     setOptimisticIcon(iconUrl);
   }, [iconUrl]);
@@ -124,18 +133,22 @@ export function EditProjectButton({
       setError('Name cannot be empty.');
       return;
     }
-    if (trimmed === appName) {
+    if (trimmed === appName && draftBrand === brand) {
       setOpen(false);
       return;
     }
     setError(null);
     startTransition(async () => {
-      const res = await renameProject(appSlug, trimmed);
-      if (res.error) setError(res.error);
-      else {
-        router.refresh();
-        setOpen(false);
+      if (trimmed !== appName) {
+        const res = await renameProject(appSlug, trimmed);
+        if (res.error) return setError(res.error);
       }
+      if (draftBrand !== brand) {
+        const res = await setProjectBrand(appSlug, draftBrand);
+        if (res.error) return setError(res.error);
+      }
+      router.refresh();
+      setOpen(false);
     });
   };
 
@@ -396,6 +409,48 @@ export function EditProjectButton({
                 outline: 'none',
               }}
             />
+
+            <p
+              id="edit-project-brand-label"
+              style={{
+                margin: '18px 0 6px',
+                fontFamily: editorialFonts.mono,
+                fontSize: 10,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: t.textSecondary,
+              }}
+            >
+              Client-facing brand
+            </p>
+            <div role="radiogroup" aria-labelledby="edit-project-brand-label" style={{ display: 'flex', gap: 8 }}>
+              {BRAND_IDS.map((id) => {
+                const selected = draftBrand === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setDraftBrand(id)}
+                    disabled={pending}
+                    style={{
+                      ...pillButton(t),
+                      borderColor: selected ? accent : t.borderVisible,
+                      color: selected ? t.textDisplay : t.textSecondary,
+                      boxShadow: selected ? `inset 0 0 0 1px ${accent}` : undefined,
+                    }}
+                  >
+                    {BRANDS[id].name}
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: t.textSecondary }}>
+              {draftBrand === 'unicorn'
+                ? 'The client sees Unicorn Studio.'
+                : `The client sees ${BRANDS[draftBrand].name} only: share and sign-in links use ${BRANDS[draftBrand].origin.replace(/^https?:\/\//, '')}.`}
+            </p>
 
             {error ? (
               <p style={{ margin: '12px 0 0', fontSize: 12, color: t.danger }}>{error}</p>

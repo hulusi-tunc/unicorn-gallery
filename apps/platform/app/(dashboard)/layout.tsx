@@ -3,7 +3,9 @@ import type { ReactNode } from 'react';
 import { DashboardTopNav, TOPNAV_HEIGHT } from '@/components/dashboard-topnav';
 import { RealtimeRefresh } from '@/components/realtime-refresh';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { getCurrentProfile, getTotalUnreadCount } from '@/lib/queries';
+import { BRANDS } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
+import { getClientBrand, getCurrentProfile, getTotalUnreadCount } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +16,14 @@ export default async function DashboardLayout({
 }): Promise<ReactNode> {
   const profile = await getCurrentProfile();
   if (!profile) redirect('/sign-in');
+
+  // A client of a white-labelled project who arrives on the Unicorn host (an
+  // old bookmark, a link from before the project was branded) is sent to
+  // their brand's host, so they never browse the gallery under Unicorn.
+  if (profile.role === 'customer' && (await getBrand()).id === 'unicorn') {
+    const clientBrand = await getClientBrand(profile.id);
+    if (clientBrand !== 'unicorn') redirect(`${BRANDS[clientBrand].origin}/apps`);
+  }
 
   const unreadCount = await getTotalUnreadCount(profile.id);
 

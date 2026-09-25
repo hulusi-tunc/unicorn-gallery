@@ -36,6 +36,7 @@ import {
   setPublicShareToken,
 } from '@/lib/actions/customers';
 import type { AppCustomerWithProfile, EligibleCustomer } from '@/lib/queries';
+import { BRANDS, type BrandId } from '@/lib/brand';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
 interface ShareButtonProps {
@@ -43,6 +44,8 @@ interface ShareButtonProps {
   appSlug: string;
   appName: string;
   publicShareToken: string | null;
+  /** The project's client-facing brand: its public link uses that brand's host. */
+  brand: BrandId;
   customers: AppCustomerWithProfile[];
   eligibleCustomers: EligibleCustomer[];
 }
@@ -89,6 +92,7 @@ function ShareDialog({
   appSlug,
   appName,
   publicShareToken,
+  brand,
   customers,
   eligibleCustomers,
   onClose,
@@ -212,6 +216,7 @@ function ShareDialog({
             appId={appId}
             appSlug={appSlug}
             token={publicShareToken}
+            brand={brand}
             t={t}
           />
         </div>
@@ -945,11 +950,13 @@ function PublicLinkSection({
   appId,
   appSlug,
   token,
+  brand,
   t,
 }: {
   appId: string;
   appSlug: string;
   token: string | null;
+  brand: BrandId;
   t: ReturnType<typeof getNd>;
 }): ReactNode {
   const router = useRouter();
@@ -957,7 +964,10 @@ function PublicLinkSection({
   const [localToken, setLocalToken] = useState<string | null>(token);
 
   const enabled = !!localToken;
-  const url = localToken ? `${getOrigin()}/shared/${localToken}` : null;
+  // A white-labelled project's link is on its brand's host, whichever host
+  // the PM happens to be copying it from.
+  const origin = brand === 'unicorn' ? getOrigin() : BRANDS[brand].origin;
+  const url = localToken ? `${origin}/shared/${localToken}` : null;
 
   const run = (action: 'enable' | 'rotate' | 'disable'): void => {
     startTransition(async () => {

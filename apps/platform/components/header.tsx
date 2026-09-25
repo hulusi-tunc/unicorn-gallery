@@ -117,6 +117,7 @@ export function AppHeader({
           appName={app.name}
           iconUrl={app.icon_url}
           accent={accent}
+          brand={app.brand ?? 'unicorn'}
           canEdit={canEdit}
           size={72}
         />
@@ -178,6 +179,7 @@ export function AppHeader({
                 appSlug={app.slug}
                 appName={app.name}
                 publicShareToken={app.public_share_token}
+                brand={app.brand ?? 'unicorn'}
                 customers={customers}
                 eligibleCustomers={eligibleCustomers}
               />

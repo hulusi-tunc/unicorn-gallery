@@ -1,10 +1,12 @@
 import { Camera } from 'lucide-react';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { ManifestFlow, ManifestFrame, Platform } from '@unicorn-studio/gallery-capture';
 import { DeviceBezel } from '@/components/device-bezel';
 import { FrameLightbox } from '@/components/frame-lightbox';
 import { WebCardThumb } from '@/components/web-card-thumb';
+import { BRANDS, isBrandId } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { imageHref } from '@/lib/image-href';
 import type {
@@ -148,6 +150,14 @@ export default async function SharedAppPage({
   if (!result) notFound();
   const { app, manifest } = result;
 
+  // A white-labelled project's link must only ever show its client's brand.
+  // An old link, or one copied from the Unicorn host, moves to the brand's
+  // own host before anything renders.
+  const brand = BRANDS[isBrandId(app.brand) ? app.brand : 'unicorn'];
+  if (brand.id !== 'unicorn' && (await getBrand()).id !== brand.id) {
+    redirect(`${brand.origin}/shared/${encodeURIComponent(token)}`);
+  }
+
   const accent = app.accent_color ?? 'oklch(0.5 0.22 254)';
 
   return (
@@ -215,7 +225,7 @@ export default async function SharedAppPage({
 
       <footer className="mt-12 border-t border-[oklch(0.9_0.007_260)] py-6 text-center dark:border-[oklch(0.24_0.008_260)]">
         <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[oklch(0.48_0.01_260)] dark:text-[oklch(0.62_0.01_260)]">
-          Shared by Unicorn Studio
+          Shared by {brand.name}
         </p>
       </footer>
     </div>

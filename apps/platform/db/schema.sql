@@ -102,6 +102,10 @@ create table if not exists public.apps (
 alter table public.apps add column if not exists project_token text unique;
 alter table public.apps add column if not exists preview_image_url text;
 alter table public.apps add column if not exists accent_color text;
+-- Which studio brand the project is shown under to its client. The gallery is
+-- white-labelled by host (see lib/brand.ts); this decides which host the
+-- project's share links and client redirects use.
+alter table public.apps add column if not exists brand text not null default 'unicorn';
 -- Project staffing — any agency user can change these via apps_agency_write RLS.
 alter table public.apps add column if not exists designer_id uuid references public.profiles(id) on delete set null;
 alter table public.apps add column if not exists pm_id uuid references public.profiles(id) on delete set null;

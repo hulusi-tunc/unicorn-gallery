@@ -1,6 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
-import { getSupabaseServerClient } from './supabase/server';
+import { type BrandId, isBrandId } from './brand';
+import { getSupabaseAdminClient, getSupabaseServerClient } from './supabase/server';
 import type {
   AppRow,
   AppRowWithStaff,
@@ -1456,4 +1457,27 @@ export async function listDorAssessments(options?: {
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as DorAssessment[];
+}
+
+/**
+ * The brand a client knows the studio by: a white-labelled brand when every
+ * project they are on carries it, Unicorn otherwise (a client on a Unicorn
+ * project already knows Unicorn, so there is nothing to hide from them).
+ */
+export async function getClientBrand(userId: string): Promise<BrandId> {
+  const admin = getSupabaseAdminClient();
+  const { data } = await admin
+    .from('app_customers')
+    .select('app:apps!inner(brand, archived_at)')
+    .eq('user_id', userId);
+  const brands = new Set<BrandId>();
+  for (const row of (data ?? []) as unknown as Array<{ app: { brand: string; archived_at: string | null } | null }>) {
+    if (!row.app || row.app.archived_at) continue;
+    brands.add(isBrandId(row.app.brand) ? row.app.brand : 'unicorn');
+  }
+  if (brands.size === 1) {
+    const [only] = brands;
+    return only!;
+  }
+  return 'unicorn';
 }

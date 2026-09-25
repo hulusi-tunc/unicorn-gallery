@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { isBrandId } from '@/lib/brand';
 import { getCurrentProfile } from '@/lib/queries';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -135,6 +136,28 @@ export async function removeProjectIcon(
     .from('apps')
     .update({ icon_url: null })
     .eq('slug', slug);
+  if (error) return { error: error.message };
+
+  revalidatePath('/');
+  revalidatePath(`/app/${slug}`);
+  return { ok: true };
+}
+
+/**
+ * Which brand the project is presented under to its client (lib/brand.ts).
+ * Decides the host of its share link and of the sign-in link its customers
+ * are given, so a white-labelled client never lands on a Unicorn page.
+ */
+export async function setProjectBrand(
+  slug: string,
+  brand: string,
+): Promise<{ ok?: true; error?: string }> {
+  const gate = await assertAgency();
+  if (!gate.ok) return { error: gate.error };
+  if (!isBrandId(brand)) return { error: 'Unknown brand.' };
+
+  const supabase = await getSupabaseServerClient();
+  const { error } = await supabase.from('apps').update({ brand }).eq('slug', slug);
   if (error) return { error: error.message };
 
   revalidatePath('/');
