@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { nanoid } from 'nanoid';
 import { getCurrentProfile } from '@/lib/queries';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
-import { BRANDS, isBrandId } from '@/lib/brand';
+import { isBrandId } from '@/lib/brand';
+import { brandSiteUrl } from '@/lib/brand-server';
 
 async function requireAgency(): Promise<{ id: string } | { error: string }> {
   const profile = await getCurrentProfile();
@@ -125,7 +126,7 @@ export async function inviteCustomer(
   // credentials the PM hands over never carry the Unicorn address.
   const { data: appRow } = await admin.from('apps').select('brand').eq('id', input.appId).maybeSingle();
   const brandId = isBrandId(appRow?.brand) ? appRow.brand : 'unicorn';
-  const origin = brandId === 'unicorn' ? getSiteUrl() : BRANDS[brandId].origin;
+  const origin = brandSiteUrl(brandId);
   const signInUrl = `${origin}/sign-in?email=${encodeURIComponent(email)}&next=${encodeURIComponent(`/app/${input.appSlug}`)}`;
   return {
     ok: true,
@@ -214,15 +215,4 @@ export async function setPublicShareToken(input: {
 
   revalidatePath(`/app/${input.appSlug}`);
   return { ok: true, token };
-}
-
-function getSiteUrl(): string {
-  const fromEnv =
-    process.env['NEXT_PUBLIC_SITE_URL'] ??
-    process.env['VERCEL_PROJECT_PRODUCTION_URL'] ??
-    process.env['VERCEL_URL'];
-  if (fromEnv) {
-    return fromEnv.startsWith('http') ? fromEnv : `https://${fromEnv}`;
-  }
-  return 'http://localhost:3010';
 }

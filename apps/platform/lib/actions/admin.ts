@@ -5,6 +5,7 @@ import type { Role } from '@/lib/db';
 import { getCurrentProfile } from '@/lib/queries';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { STUDIO_OWNER_EMAIL } from '@/lib/user-token';
+import { brandSiteUrl } from '@/lib/brand-server';
 
 const HARDCODED_FOUNDER = STUDIO_OWNER_EMAIL;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -182,7 +183,7 @@ export async function createAccount(
   revalidatePath('/admin');
   return {
     ok: true,
-    signInUrl: `${getSiteUrl()}/sign-in?email=${encodeURIComponent(email)}`,
+    signInUrl: `${brandSiteUrl('unicorn')}/sign-in?email=${encodeURIComponent(email)}`,
   };
 }
 
@@ -296,16 +297,4 @@ export async function updateAccount(
     emailChanged: Boolean(nextEmail),
     passwordChanged: wantsPassword,
   };
-}
-
-function getSiteUrl(): string {
-  const fromEnv =
-    process.env['NEXT_PUBLIC_SITE_URL'] ??
-    process.env['VERCEL_PROJECT_PRODUCTION_URL'] ??
-    process.env['VERCEL_URL'];
-  if (fromEnv) {
-    const url = fromEnv.startsWith('http') ? fromEnv : `https://${fromEnv}`;
-    return url.replace(/\/$/, '');
-  }
-  return 'http://localhost:3010';
 }
