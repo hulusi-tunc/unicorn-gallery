@@ -12,7 +12,6 @@ import {
   type ReactNode,
 } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
-import { BrowserFrame } from '@/components/browser-frame';
 import { DeviceBezel } from '@/components/device-bezel';
 import {
   Tooltip,
@@ -516,14 +515,13 @@ function PreviewArea({
     );
   }
 
-  // Web: a 16:10 browser window floats on the dot stage so a standard
-  // viewport snap fits without left/right cropping. Full-page snaps stay
-  // anchored to the top (cover + top center) so the hero section reads first.
+  // Web: 16:10 browser-viewport frame floats on the dot stage so a
+  // standard viewport snap fits without left/right cropping. Full-page
+  // snaps stay anchored to the top (cover + top center) so the hero
+  // section reads first.
   return (
     <div style={stageBg}>
-      <BrowserFrame
-        size="md"
-        elevated
+      <div
         style={{
           position: 'absolute',
           left: '50%',
@@ -531,6 +529,13 @@ function PreviewArea({
           transform: 'translate(-50%, -50%)',
           width: '88%',
           aspectRatio: '16 / 10',
+          borderRadius: 12,
+          overflow: 'hidden',
+          background: '#000',
+          boxShadow:
+            theme === 'dark'
+              ? '0 18px 38px -18px rgba(0,0,0,0.7)'
+              : '0 18px 38px -18px rgba(15,15,20,0.25)',
         }}
       >
         <Image
@@ -545,7 +550,7 @@ function PreviewArea({
           }}
           loading="lazy"
         />
-      </BrowserFrame>
+      </div>
     </div>
   );
 }

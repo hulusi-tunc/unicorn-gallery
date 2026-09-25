@@ -1,9 +1,8 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useLayoutEffect, useState } from 'react';
-import { BrowserFrame } from '@/components/browser-frame';
 import { DeviceBezel } from '@/components/device-bezel';
 import {
   clearPendingOpen,
@@ -39,7 +38,6 @@ export function FrameModalSkeleton({
   onClose?: () => void;
 } = {}): ReactNode {
   const router = useRouter();
-  const pathname = usePathname();
   // Read once on mount: the preview belongs to the click that brought us here.
   const [preview] = useState<FramePreview | null>(() => previewProp ?? readFramePreview());
   // Only the first shell of an opening animates; one taking over from another
@@ -66,9 +64,6 @@ export function FrameModalSkeleton({
       document.body.style.overflow = prevOverflow;
     };
   }, [close]);
-
-  const appSlug = decodeURIComponent(pathname?.split('/')[2] ?? '');
-  const address = preview?.flowName ? `${appSlug} / ${preview.flowName}` : appSlug || undefined;
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: Esc handled above.
@@ -125,10 +120,10 @@ export function FrameModalSkeleton({
                   </div>
                 ) : (
                   <div className="m-auto w-full shrink-0" style={{ maxWidth: 1100 }}>
-                    <BrowserFrame size="lg" address={address} elevated>
+                    <div className="overflow-hidden rounded-xl bg-white shadow-2xl">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={preview.src} alt={preview.name} className="block h-auto w-full" />
-                    </BrowserFrame>
+                    </div>
                   </div>
                 )
               ) : (

@@ -11,7 +11,6 @@ const CommentsPanel = dynamic(
   () => import('@/components/comments-panel').then((m) => ({ default: m.CommentsPanel })),
   { ssr: false, loading: () => <div className="flex-1 animate-pulse rounded-2xl bg-white/5" /> },
 );
-import { BrowserFrame } from '@/components/browser-frame';
 import { DeviceBezel } from '@/components/device-bezel';
 import { ZoomStage } from '@/components/zoom-stage';
 import { MarkFrameRead } from '@/components/mark-frame-read';
@@ -71,7 +70,6 @@ export function FrameModal({
 }): ReactNode {
   const router = useRouter();
   const isMobile = platform !== 'web';
-  const address = `${appSlug} / ${flow.name}`;
   const [copied, setCopied] = useState(false);
   // Scale in on open, unless a loading shell already did (it shows first
   // whenever the data takes a moment, and animating twice reads as a stutter).
@@ -332,20 +330,7 @@ export function FrameModal({
             dragToPan={isMobile && !videoSrc && readOnly}
             maxWidth={1100}
           >
-                {videoSrc && !isMobile ? (
-                  <BrowserFrame size="lg" address={address} elevated>
-                    <video
-                      src={videoSrc}
-                      poster={src}
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                      controls
-                      className="block h-auto w-full"
-                    />
-                  </BrowserFrame>
-                ) : videoSrc ? (
+                {videoSrc ? (
                   <div className="overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
                     <video
                       src={videoSrc}
@@ -400,41 +385,36 @@ export function FrameModal({
                     )}
                   />
                 ) : (
-                  /* The window chrome sits outside the pin overlay, so pins
-                     still normalise against the screenshot alone and every
-                     comment placed before the frame existed stays put. The
-                     content is left unclipped for the pin popover, so the
-                     image rounds its own bottom corners. */
-                  <BrowserFrame size="lg" address={address} elevated clipContent={false} className="w-full">
-                    <div className="w-full" ref={pinContainerRef}>
-                      <PinOverlay
-                        comments={comments}
-                        activeCommentId={activeCommentId}
-                        onPinPlace={handlePinPlace}
-                        onPinClick={handlePinClick}
-                        readOnly={readOnly}
-                      >
+                  <div className="w-full" ref={pinContainerRef}>
+                    <PinOverlay
+                      comments={comments}
+                      activeCommentId={activeCommentId}
+                      onPinPlace={handlePinPlace}
+                      onPinClick={handlePinClick}
+                      readOnly={readOnly}
+                    >
+                      <div className="overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[oklch(0.2_0.008_260)]">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                        src={src}
-                        alt={frameName}
-                        className={`block h-auto w-full rounded-b-xl ${imageReady ? '' : 'skeleton skeleton-dark'}`}
-                        /* Hold a 16:10 box until the image arrives, so the
-                           window does not collapse to its title bar. */
-                        style={imageReady ? undefined : { aspectRatio: '16 / 10' }}
-                      />
-                        {pendingPin && (
-                          <PinPopover
-                            pin={pendingPin}
-                            containerRef={pinContainerRef}
-                            onSubmit={handlePinSubmit}
-                            onCancel={handlePinCancel}
-                            mentionables={mentionables}
-                          />
-                        )}
-                      </PinOverlay>
-                    </div>
-                  </BrowserFrame>
+                          src={src}
+                          alt={frameName}
+                          className={`block h-auto w-full ${imageReady ? '' : 'skeleton skeleton-dark'}`}
+                          /* Hold a 16:10 box until the image arrives, so the
+                             card does not collapse to nothing. */
+                          style={imageReady ? undefined : { aspectRatio: '16 / 10' }}
+                        />
+                      </div>
+                      {pendingPin && (
+                        <PinPopover
+                          pin={pendingPin}
+                          containerRef={pinContainerRef}
+                          onSubmit={handlePinSubmit}
+                          onCancel={handlePinCancel}
+                          mentionables={mentionables}
+                        />
+                      )}
+                    </PinOverlay>
+                  </div>
                 )}
           </ZoomStage>
         </div>

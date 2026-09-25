@@ -172,7 +172,7 @@ export function FrameVersionStage({
           </Link>
         ) : null}
         <FrameLightbox src={currentSrc} name={frameName} isMobile={platform !== 'web'}>
-          <DeviceFrame platform={platform} src={currentSrc} alt={frameName} address={frameName} />
+          <DeviceFrame platform={platform} src={currentSrc} alt={frameName} />
         </FrameLightbox>
         {nextHref ? (
           <Link

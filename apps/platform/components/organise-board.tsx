@@ -418,7 +418,7 @@ export function OrganiseBoard({ appSlug, platform, flows }: Props): ReactNode {
                       />
                     </div>
                   ) : (
-                    <WebCardThumb src={imageHref(frame.image)} alt={frame.name} />
+                    <WebCardThumb src={imageHref(frame.image)} alt={frame.name} inset />
                   )}
 
                   {/* Controls ride on the card and only on hover. Permanent

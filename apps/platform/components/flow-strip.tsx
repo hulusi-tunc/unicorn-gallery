@@ -6,8 +6,7 @@ import Link from 'next/link';
 import { useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { DeviceBezel } from '@/components/device-bezel';
 import { UnresolvedBadge } from '@/components/unresolved-badge';
-import { BrowserFrame } from '@/components/browser-frame';
-import { WebCardThumb } from '@/components/web-card-thumb';
+import { WEB_SHOT_CLASS, WEB_SHOT_INSET, WebCardThumb } from '@/components/web-card-thumb';
 import { isPlainClick, primeFramePreview } from '@/lib/frame-preview';
 import { imageHref } from '@/lib/image-href';
 import type { FrameUnresolvedSummary } from '@/lib/queries';
@@ -201,36 +200,38 @@ function FlowStripCard({
             />
           </div>
         ) : (
-          <BrowserFrame size="sm" fill>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={src}
-              alt={name}
-              loading="lazy"
-              onLoad={(e) => {
-                const img = e.currentTarget;
-                if (img.naturalWidth > 0) setIsFullPage(img.naturalHeight / img.naturalWidth >= 1.4);
-              }}
-              className={`block h-full w-full object-cover object-top ${videoSrc && hovering ? 'invisible' : ''}`}
-            />
-            {/* Video overlay on hover */}
-            {videoSrc ? (
-              <video
-                ref={videoRef}
-                src={videoSrc}
-                muted
-                loop
-                playsInline
-                className={`absolute inset-0 h-full w-full object-cover object-top ${hovering ? 'visible' : 'invisible'}`}
+          <div className={`h-full w-full ${WEB_SHOT_INSET}`}>
+            <div className={WEB_SHOT_CLASS}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={src}
+                alt={name}
+                loading="lazy"
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  if (img.naturalWidth > 0) setIsFullPage(img.naturalHeight / img.naturalWidth >= 1.4);
+                }}
+                className={`block h-full w-full object-cover object-top ${videoSrc && hovering ? 'invisible' : ''}`}
               />
-            ) : null}
-            {isFullPage ? (
-              <span className="absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-[13px] font-medium text-white backdrop-blur-sm">
-                <FileText size={13} />
-                Full page
-              </span>
-            ) : null}
-          </BrowserFrame>
+              {/* Video overlay on hover */}
+              {videoSrc ? (
+                <video
+                  ref={videoRef}
+                  src={videoSrc}
+                  muted
+                  loop
+                  playsInline
+                  className={`absolute inset-0 h-full w-full object-cover object-top ${hovering ? 'visible' : 'invisible'}`}
+                />
+              ) : null}
+              {isFullPage ? (
+                <span className="absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-[13px] font-medium text-white backdrop-blur-sm">
+                  <FileText size={13} />
+                  Full page
+                </span>
+              ) : null}
+            </div>
+          </div>
         )}
 
 

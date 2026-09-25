@@ -239,8 +239,6 @@ const TEXT_MUTED = rgb(0.42, 0.42, 0.45);
 const SURFACE = rgb(0.96, 0.96, 0.97);
 const BORDER = rgb(0.86, 0.86, 0.88);
 const SCREEN_BG = rgb(0, 0, 0);
-const BROWSER_BAR = rgb(0.955, 0.955, 0.965);
-const BROWSER_DOT = rgb(0.8, 0.8, 0.82);
 
 interface FrameEntry {
   name: string;
@@ -529,9 +527,9 @@ async function drawCell(
 }
 
 /**
- * Web platform: the screenshot inside a browser window (a slim bar with
- * three dots and a hairline around the window), the same chrome the
- * gallery's BrowserFrame draws around web captures on screen.
+ * Web platform: a bordered, slightly-rounded card with the screenshot
+ * letterboxed inside on a black background — same visual language as
+ * DeviceFrame's web branch in the gallery.
  */
 async function drawWebCard(
   pdf: PDFDocument,
@@ -550,52 +548,19 @@ async function drawWebCard(
     // cell cleanly without center-letterboxing top/bottom. If the image is
     // taller than the cell, clip the bottom rather than shrink it height-
     // first — the user can see the rest in the lightbox / full-page page.
-    const barH = Math.min(16, Math.max(8, w * 0.035));
-    const top = y + h;
-    const screenTop = top - barH;
-    const screenH = h - barH;
     const scaleByWidth = w / embedded.width;
     const drawnW = w;
     const drawnH = embedded.height * scaleByWidth;
-    const visibleH = Math.min(drawnH, screenH);
-    const windowBottom = screenTop - visibleH;
-    drawDropShadow(page, x, windowBottom, w, top - windowBottom);
-
-    // Window bar: three neutral dots, then a hairline between bar and page.
-    page.drawRectangle({ x, y: screenTop, width: w, height: barH, color: BROWSER_BAR });
-    const dot = barH * 0.28;
-    for (let i = 0; i < 3; i++) {
-      page.drawCircle({
-        x: x + barH * 0.55 + dot + i * dot * 2.8,
-        y: screenTop + barH / 2,
-        size: dot,
-        color: BROWSER_DOT,
-      });
-    }
-
-    page.pushOperators(pushGraphicsState(), rectangle(x, y, w, screenH), clip(), endPath());
+    const visibleH = Math.min(drawnH, h);
+    drawDropShadow(page, x, y + h - visibleH, drawnW, visibleH);
+    page.pushOperators(pushGraphicsState(), rectangle(x, y, w, h), clip(), endPath());
     page.drawImage(embedded, {
       x,
-      y: screenTop - drawnH,
+      y: y + h - drawnH,
       width: drawnW,
       height: drawnH,
     });
     page.pushOperators(popGraphicsState());
-
-    page.drawLine({
-      start: { x, y: screenTop },
-      end: { x: x + w, y: screenTop },
-      thickness: 0.5,
-      color: BORDER,
-    });
-    page.drawRectangle({
-      x,
-      y: windowBottom,
-      width: w,
-      height: top - windowBottom,
-      borderColor: BORDER,
-      borderWidth: 0.5,
-    });
   } else {
     page.drawRectangle({ x, y, width: w, height: h, color: SCREEN_BG });
     drawPlaceholderLabel(page, font, placeholderText(image), x, y, w, h);

@@ -1,46 +1,42 @@
 import type { Platform } from '@unicorn-studio/gallery-capture';
 import type { ReactNode } from 'react';
-import { BrowserFrame, browserBarHeight } from '@/components/browser-frame';
 import { DeviceBezel } from '@/components/device-bezel';
 
 export function DeviceFrame({
   platform,
   src,
   alt,
-  address,
 }: {
   platform: Platform;
   src: string;
   alt: string;
-  /** Web only: text for the browser window's address pill. */
-  address?: string;
 }): ReactNode {
   if (platform === 'web') {
     // Full-page snaps can be 8000+ px tall — fit-to-height collapses them
     // into an unreadable matchstick. Fit-to-width with a vertical scroll
     // shows the page at a readable scale and lets the user scroll like
     // they would in the real browser. Container caps both axes so a
-    // viewport-only (1440×900) snap stays in-view without scrolling. The
-    // browser window wraps the scroll area, so its bar stays put while the
-    // page scrolls under it, the way a real browser behaves.
+    // viewport-only (1440×900) snap stays in-view without scrolling.
     return (
-      <BrowserFrame
-        size="lg"
-        address={address}
-        elevated
-        style={{ width: 'min(1200px, 100%)' }}
+      <div
+        style={{
+          maxHeight: 'min(86vh, calc(100vh - 280px))',
+          maxWidth: '100%',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        }}
       >
-        <div
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={alt}
           style={{
-            maxHeight: `calc(min(86vh, calc(100vh - 280px)) - ${browserBarHeight('lg')}px)`,
-            overflowY: 'auto',
-            overflowX: 'hidden',
+            display: 'block',
+            width: 'min(1200px, 100%)',
+            height: 'auto',
           }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={alt} style={{ display: 'block', width: '100%', height: 'auto' }} />
-        </div>
-      </BrowserFrame>
+        />
+      </div>
     );
   }
 

@@ -345,7 +345,7 @@ function ReadonlyCard({
       </span>
       {src ? (
         <FrameLightbox src={src} name={frame.name}>
-          <WebCardThumb src={src} alt={frame.name} width={WEB_CARD_WIDTH} height={WEB_CARD_HEIGHT} elevated />
+          <WebCardThumb src={src} alt={frame.name} width={WEB_CARD_WIDTH} height={WEB_CARD_HEIGHT} />
         </FrameLightbox>
       ) : (
         <div

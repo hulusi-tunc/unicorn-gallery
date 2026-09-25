@@ -89,6 +89,7 @@ export function ScreensGrid({
                   src={imageHref(frame.image)}
                   alt={frame.name}
                   hasVideo={!!frame.video}
+                  inset
                 />
               )}
             </div>
