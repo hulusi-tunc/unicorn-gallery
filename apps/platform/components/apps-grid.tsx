@@ -116,7 +116,9 @@ export function AppsGrid({
           title={staff === 'mine' ? 'No apps assigned to you' : 'No apps yet'}
           body={staff === 'mine'
             ? 'Try the All tab, or assign yourself as designer/PM on a project.'
-            : 'Open Unicorn Capture and push a project to get started.'}
+            : isAgency
+              ? 'Open Unicorn Capture and push a project to get started.'
+              : 'Your projects will appear here once they are shared with you.'}
         />
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-x-4 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">

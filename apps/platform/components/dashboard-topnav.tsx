@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
-import { UnicornLogo } from '@/components/brand/unicorn-logo';
+import { BrandLogo } from '@/components/brand/brand-logo';
+import { useBrand } from '@/components/providers/brand-provider';
 import { CommandPalette } from '@/components/command-palette';
 import { UserMenu } from '@/components/user-menu';
 import type { Profile } from '@/lib/db';
@@ -26,6 +27,7 @@ export function DashboardTopNav({
   unreadCount?: number;
 }): ReactNode {
   const { theme, toggle } = useTheme();
+  const brand = useBrand();
   const t = getNd(theme);
   const pathname = usePathname();
   const [searchHovered, setSearchHovered] = useState(false);
@@ -94,7 +96,7 @@ export function DashboardTopNav({
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <Link
           href="/apps"
-          aria-label="Unicorn Studio home"
+          aria-label={`${brand.name} home`}
           onMouseEnter={() => setLogoHovered(true)}
           onMouseLeave={() => setLogoHovered(false)}
           style={{
@@ -106,7 +108,7 @@ export function DashboardTopNav({
             transition: 'color 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
           }}
         >
-          <UnicornLogo variant="mark" height={28} color={theme === 'dark' ? 'white' : 'black'} />
+          <BrandLogo variant="mark" height={28} color={theme === 'dark' ? 'white' : 'black'} />
         </Link>
         <Link
           href="/apps"

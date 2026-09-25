@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
-import { UnicornLogo } from '@/components/brand/unicorn-logo';
+import { BrandLogo } from '@/components/brand/brand-logo';
+import { useBrand } from '@/components/providers/brand-provider';
 import { Eyebrow, PrimaryPill, Rule, TextInput } from '@/components/editorial';
 import { editorialFonts, getNd } from '@/lib/tokens';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -20,6 +21,7 @@ export function SignInClient({
   initialError: string | null;
 }): ReactNode {
   const { theme } = useTheme();
+  const brand = useBrand();
   const t = getNd(theme);
   const router = useRouter();
   const params = useSearchParams();
@@ -76,7 +78,7 @@ export function SignInClient({
       >
         <Link
           href="/"
-          aria-label="Unicorn Studio home"
+          aria-label={`${brand.name} home`}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -85,7 +87,7 @@ export function SignInClient({
             marginBottom: 'clamp(40px, 8vw, 96px)',
           }}
         >
-          <UnicornLogo variant="wordmark" height={22} color={t.accent} />
+          <BrandLogo variant="wordmark" height={22} color={t.accent} />
         </Link>
 
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -113,8 +115,9 @@ export function SignInClient({
                 color: t.textSecondary,
               }}
             >
-              Sign in with the email + password your PM gave you, or the
-              account you created at sign-up.
+              {brand.id === 'unicorn'
+                ? 'Sign in with the email + password your PM gave you, or the account you created at sign-up.'
+                : 'Sign in with the email and password your project manager gave you.'}
             </p>
 
             <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -205,29 +208,35 @@ export function SignInClient({
                 Sign in
               </PrimaryPill>
 
-              <Rule tone="subtle" />
+              {/* Team sign-up is the studio's own; a white-labelled client
+                  must not be offered it. */}
+              {brand.id === 'unicorn' ? (
+                <>
+                  <Rule tone="subtle" />
 
-              <p
-                style={{
-                  margin: 0,
-                  fontFamily: editorialFonts.body,
-                  fontSize: 13,
-                  color: t.textSecondary,
-                  textAlign: 'center',
-                }}
-              >
-                New to the agency?{' '}
-                <Link
-                  href="/sign-up"
-                  style={{
-                    color: t.textDisplay,
-                    textDecoration: 'none',
-                    borderBottom: `1px solid ${t.borderVisible}`,
-                  }}
-                >
-                  Create an account
-                </Link>
-              </p>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontFamily: editorialFonts.body,
+                      fontSize: 13,
+                      color: t.textSecondary,
+                      textAlign: 'center',
+                    }}
+                  >
+                    New to the agency?{' '}
+                    <Link
+                      href="/sign-up"
+                      style={{
+                        color: t.textDisplay,
+                        textDecoration: 'none',
+                        borderBottom: `1px solid ${t.borderVisible}`,
+                      }}
+                    >
+                      Create an account
+                    </Link>
+                  </p>
+                </>
+              ) : null}
             </form>
           </div>
         </div>
@@ -243,7 +252,7 @@ export function SignInClient({
             textAlign: 'center',
           }}
         >
-          Unicorn Studio · Internal gallery
+          {brand.authFooter}
         </p>
       </div>
     </div>

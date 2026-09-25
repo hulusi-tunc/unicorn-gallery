@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { DownloadToastProvider } from '@/components/download-toast';
+import { BrandProvider } from '@/components/providers/brand-provider';
 import { ThemeProvider } from '@/components/providers/theme-provider';
+import { getBrand } from '@/lib/brand-server';
 import './globals.css';
 
 const inter = Inter({
@@ -16,13 +18,21 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ['400', '500', '700'],
 });
 
-export const metadata: Metadata = {
-  title: 'Unicorn Studio Gallery',
-  description:
-    'Internal Mobbin-style gallery for the apps Unicorn Studio builds for its customers.',
-};
+// Title, description and icons follow the brand of the host (lib/brand.ts),
+// so a white-labelled client never sees Unicorn in a tab or bookmark. The
+// icons are declared here rather than as app/icon.png, which Next would
+// serve on every host.
+export async function generateMetadata(): Promise<Metadata> {
+  const brand = await getBrand();
+  return {
+    title: brand.productName,
+    description: brand.description,
+    icons: { icon: brand.icon, apple: brand.appleIcon },
+  };
+}
 
-export default function RootLayout({ children }: { children: ReactNode }): ReactNode {
+export default async function RootLayout({ children }: { children: ReactNode }): Promise<ReactNode> {
+  const brand = await getBrand();
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -36,9 +46,11 @@ export default function RootLayout({ children }: { children: ReactNode }): React
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
         style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif' }}
       >
-        <ThemeProvider>
-          <DownloadToastProvider>{children}</DownloadToastProvider>
-        </ThemeProvider>
+        <BrandProvider brandId={brand.id}>
+          <ThemeProvider>
+            <DownloadToastProvider>{children}</DownloadToastProvider>
+          </ThemeProvider>
+        </BrandProvider>
       </body>
     </html>
   );

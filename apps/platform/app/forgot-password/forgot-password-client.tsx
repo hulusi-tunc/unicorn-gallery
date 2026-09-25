@@ -4,7 +4,8 @@ import { ArrowLeft, Loader2, Mail } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
-import { UnicornLogo } from '@/components/brand/unicorn-logo';
+import { BrandLogo } from '@/components/brand/brand-logo';
+import { useBrand } from '@/components/providers/brand-provider';
 import { Eyebrow, PrimaryPill, Rule, TextInput } from '@/components/editorial';
 import { editorialFonts, getNd } from '@/lib/tokens';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -13,6 +14,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function ForgotPasswordClient(): ReactNode {
   const { theme } = useTheme();
+  const brand = useBrand();
   const t = getNd(theme);
 
   const [email, setEmail] = useState('');
@@ -65,7 +67,7 @@ export function ForgotPasswordClient(): ReactNode {
       >
         <Link
           href="/"
-          aria-label="Unicorn Studio home"
+          aria-label={`${brand.name} home`}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -74,7 +76,7 @@ export function ForgotPasswordClient(): ReactNode {
             marginBottom: 'clamp(40px, 8vw, 96px)',
           }}
         >
-          <UnicornLogo variant="wordmark" height={22} color={t.accent} />
+          <BrandLogo variant="wordmark" height={22} color={t.accent} />
         </Link>
 
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -245,7 +247,7 @@ export function ForgotPasswordClient(): ReactNode {
             textAlign: 'center',
           }}
         >
-          Unicorn Studio - Internal gallery
+          {brand.authFooter}
         </p>
       </div>
     </div>

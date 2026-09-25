@@ -35,6 +35,7 @@ import {
   setCommentResolved,
   updateComment,
 } from '@/lib/actions/comments';
+import { useBrand } from '@/components/providers/brand-provider';
 import { editorialFonts, getNd } from '@/lib/tokens';
 import type { CommentWithAuthor } from '@/lib/comments';
 import type { MentionableProfile } from '@/lib/queries';
@@ -1251,6 +1252,7 @@ function MentionTextarea({
   onSubmitShortcut?: (form: HTMLFormElement) => void;
   onEscape?: () => void;
 }): ReactNode {
+  const brand = useBrand();
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const ref = textareaRef ?? internalRef;
   const [trigger, setTrigger] = useState<{ start: number; query: string } | null>(null);
@@ -1442,7 +1444,7 @@ function MentionTextarea({
                     letterSpacing: '0.06em',
                   }}
                 >
-                  {m.role === 'agency' ? 'Unicorn' : 'Customer'}
+                  {m.role === 'agency' ? brand.staffLabel : 'Customer'}
                 </span>
               </button>
             );
