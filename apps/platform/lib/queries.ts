@@ -598,7 +598,9 @@ export const getMentionableProfilesForApp = cache(async function getMentionableP
       .order('name', { ascending: true }),
     supabase
       .from('app_customers')
-      .select('profile:profiles!inner(id, email, name, role, avatar_url)')
+      // app_customers has two FKs to profiles (user_id, invited_by); name the
+      // one meant, or PostgREST refuses the embed and this silently returns none.
+      .select('profile:profiles!app_customers_user_id_fkey!inner(id, email, name, role, avatar_url)')
       .eq('app_id', appId),
   ]);
   const out: MentionableProfile[] = [];
@@ -643,7 +645,9 @@ export async function listAppCustomers(appId: string): Promise<AppCustomerWithPr
   const { data, error } = await supabase
     .from('app_customers')
     .select(
-      'user_id, added_at, invited_by, profile:profiles!inner(id, email, name, flavor, avatar_url, role)',
+      // Name the FK: app_customers also points at profiles via invited_by,
+      // and an ambiguous embed errors, which left this list always empty.
+      'user_id, added_at, invited_by, profile:profiles!app_customers_user_id_fkey!inner(id, email, name, flavor, avatar_url, role)',
     )
     .eq('app_id', appId)
     .order('added_at', { ascending: false });
