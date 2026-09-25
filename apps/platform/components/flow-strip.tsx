@@ -8,6 +8,7 @@ import { DeviceBezel } from '@/components/device-bezel';
 import { UnresolvedBadge } from '@/components/unresolved-badge';
 import { BrowserFrame } from '@/components/browser-frame';
 import { WebCardThumb } from '@/components/web-card-thumb';
+import { isPlainClick, primeFramePreview } from '@/lib/frame-preview';
 import { imageHref } from '@/lib/image-href';
 import type { FrameUnresolvedSummary } from '@/lib/queries';
 
@@ -63,7 +64,7 @@ export function FlowStrip({
           ref={scrollRef}
           className="no-scrollbar flex gap-3 overflow-x-auto py-3 -my-3"
         >
-          {flow.frames.map((frame) => {
+          {flow.frames.map((frame, i) => {
             const src = imageHref(frame.image);
             const href = `/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(frame.id)}${versionQuery}`;
             return (
@@ -73,6 +74,9 @@ export function FlowStrip({
                 src={src}
                 videoSrc={frame.video}
                 name={frame.name}
+                flowName={flow.name}
+                index={i + 1}
+                total={flow.frames.length}
                 isMobile={isMobile}
                 unresolved={unresolvedByFrame?.get(frame.id) ?? null}
               />
@@ -127,6 +131,9 @@ function FlowStripCard({
   src,
   videoSrc,
   name,
+  flowName,
+  index,
+  total,
   isMobile,
   unresolved,
 }: {
@@ -134,6 +141,9 @@ function FlowStripCard({
   src: string;
   videoSrc?: string;
   name: string;
+  flowName: string;
+  index: number;
+  total: number;
   isMobile: boolean;
   unresolved: FrameUnresolvedSummary | null;
 }): ReactNode {
@@ -163,6 +173,11 @@ function FlowStripCard({
       style={{ width: 'calc(25% - 9px)', minWidth: 180, maxWidth: 300 }}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
+      onClick={(e) => {
+        if (isPlainClick(e)) {
+          primeFramePreview({ src, name, flowName, isMobile, index, total, mode: 'open' });
+        }
+      }}
     >
       <div
         className="relative overflow-hidden rounded-xl bg-[oklch(0.96_0.004_260)] transition-all duration-200 hover:scale-[1.01] dark:bg-[oklch(0.19_0.007_260)]"

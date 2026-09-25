@@ -121,3 +121,79 @@ code {
 .iphone-bezel-screen-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.28);
 }
+
+/* Loading feedback — frame modal entrance, skeleton blocks, and the thin
+   indeterminate bar. The modal scales in from 96% rather than zero: enough
+   to read as "opening", not enough to feel like a zoom. */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+}
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@keyframes loading-bar {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(350%); }
+}
+.modal-backdrop-in {
+  animation: modal-backdrop-in 180ms ease-out both;
+}
+.modal-panel-in {
+  animation: modal-panel-in 240ms cubic-bezier(0.165, 0.84, 0.44, 1) both;
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    oklch(0.95 0.004 260) 30%,
+    oklch(0.975 0.003 260) 50%,
+    oklch(0.95 0.004 260) 70%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+.dark .skeleton,
+.skeleton-dark {
+  background: linear-gradient(
+    90deg,
+    oklch(0.22 0.007 260) 30%,
+    oklch(0.26 0.008 260) 50%,
+    oklch(0.22 0.007 260) 70%
+  );
+  background-size: 200% 100%;
+}
+.loading-bar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.loading-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 30%;
+  background: oklch(0.65 0.19 254);
+  animation: loading-bar 1.1s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the fade, drop the movement; freeze the shimmer and pulse the
+     loading bar in place instead of sweeping it. */
+  .modal-panel-in {
+    animation-name: fade-in;
+  }
+  .skeleton {
+    animation: none;
+  }
+  .loading-bar::after {
+    width: 100%;
+    animation: fade-in 1.2s ease-in-out infinite alternate;
+  }
+}

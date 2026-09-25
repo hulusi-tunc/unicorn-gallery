@@ -1,8 +1,8 @@
-import Link from 'next/link';
 import type { ManifestFlow, Platform } from '@unicorn-studio/gallery-capture';
 import type { ReactNode } from 'react';
 import { Play } from 'lucide-react';
 import { DeviceBezel } from '@/components/device-bezel';
+import { FrameCardLink } from '@/components/frame-card-link';
 import { UnresolvedBadge } from '@/components/unresolved-badge';
 import { WebCardThumb } from '@/components/web-card-thumb';
 import { imageHref } from '@/lib/image-href';
@@ -43,9 +43,17 @@ export function ScreensGrid({
       {cards.map(({ flow, frame }) => {
         const unresolved = unresolvedByFrame?.get(frame.id) ?? null;
         return (
-          <Link
+          <FrameCardLink
             key={frame.id}
             href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(frame.id)}${versionQuery}`}
+            preview={{
+              src: imageHref(frame.image),
+              name: frame.name,
+              flowName: flow.name,
+              isMobile,
+              index: flow.frames.indexOf(frame) + 1,
+              total: flow.frames.length,
+            }}
             className="group flex flex-col gap-3"
           >
             {/* Card container */}
@@ -93,7 +101,7 @@ export function ScreensGrid({
                 {flow.name}
               </p>
             </div>
-          </Link>
+          </FrameCardLink>
         );
       })}
     </div>

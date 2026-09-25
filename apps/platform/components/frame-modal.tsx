@@ -4,7 +4,7 @@ import type { ManifestFlow, Platform } from '@unicorn-studio/gallery-capture';
 import { ArrowLeft, ArrowRight, Link2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 
 const CommentsPanel = dynamic(
@@ -18,6 +18,12 @@ import { MarkFrameRead } from '@/components/mark-frame-read';
 import { PinOverlay, PinPopover, type PinDraft } from '@/components/pin-overlay';
 import type { CommentWithAuthor } from '@/lib/comments';
 import { postComment } from '@/lib/actions/comments';
+import {
+  clearPendingOpen,
+  primeFramePreview,
+  shouldAnimateIn,
+  useImageReady,
+} from '@/lib/frame-preview';
 import { imageHref } from '@/lib/image-href';
 import type { MentionableProfile } from '@/lib/queries';
 
@@ -29,12 +35,12 @@ export function FrameModal({
   appId,
   platform,
   flow,
-  activeFrameId,
-  src,
-  videoSrc,
-  frameName,
+  activeFrameId: loadedFrameId,
+  src: loadedSrc,
+  videoSrc: loadedVideoSrc,
+  frameName: loadedFrameName,
   frameRowId,
-  comments,
+  comments: loadedComments,
   isAgency,
   currentUserId,
   mentionables,
@@ -67,15 +73,41 @@ export function FrameModal({
   const isMobile = platform !== 'web';
   const address = `${appSlug} / ${flow.name}`;
   const [copied, setCopied] = useState(false);
+  // Scale in on open, unless a loading shell already did (it shows first
+  // whenever the data takes a moment, and animating twice reads as a stutter).
+  const [animateIn] = useState(() => shouldAnimateIn());
+
+  // The click overlay has done its job once the real modal is here. Before
+  // paint, so the shell and the modal never stack for a frame.
+  useLayoutEffect(() => {
+    clearPendingOpen();
+  }, []);
+
+  // Prev/next shows the target frame immediately, from the manifest already
+  // in hand: its screenshot, name and position swap on the click, and only
+  // its comments wait for the server. Cleared when the new frame's data lands.
+  const [pendingFrame, setPendingFrame] = useState<ManifestFlow['frames'][number] | null>(null);
+  useEffect(() => {
+    setPendingFrame(null);
+  }, [loadedFrameId]);
+  const activeFrameId = pendingFrame?.id ?? loadedFrameId;
+  const src = pendingFrame ? imageHref(pendingFrame.image) : loadedSrc;
+  const videoSrc = pendingFrame ? pendingFrame.video : loadedVideoSrc;
+  const frameName = pendingFrame?.name ?? loadedFrameName;
+  // Pins belong to the loaded frame; never draw them over the next one.
+  const comments = pendingFrame ? [] : loadedComments;
+  const imageReady = useImageReady(src);
+  const loading = !imageReady || pendingFrame !== null;
   const [pendingPin, setPendingPin] = useState<PinDraft | null>(null);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const pinContainerRef = useRef<HTMLDivElement>(null);
 
   const handlePinPlace = useCallback((pin: PinDraft) => {
-    if (readOnly) return;
+    // Mid-switch the comment would attach to the frame being left.
+    if (readOnly || pendingFrame) return;
     setPendingPin(pin);
     setActiveCommentId(null);
-  }, [readOnly]);
+  }, [readOnly, pendingFrame]);
 
   const handlePinSubmit = useCallback(async (body: string) => {
     if (!pendingPin) return;
@@ -113,6 +145,28 @@ export function FrameModal({
     [appSlug, flow.id, versionQuery],
   );
 
+  // Prev/next: hand the target's screenshot to the loading shell first, so if
+  // the next frame's data is not prefetched yet the shell shows its image at
+  // once instead of the old frame sitting there frozen.
+  const goTo = useCallback(
+    (target: ManifestFlow['frames'][number]): void => {
+      setPendingFrame(target);
+      setPendingPin(null);
+      setActiveCommentId(null);
+      primeFramePreview({
+        src: imageHref(target.image),
+        name: target.name,
+        flowName: flow.name,
+        isMobile,
+        index: flow.frames.indexOf(target) + 1,
+        total,
+        mode: 'switch',
+      });
+      router.replace(frameHref(target.id), { scroll: false });
+    },
+    [flow.name, flow.frames, isMobile, total, router, frameHref],
+  );
+
   const flowUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}`
     : '';
@@ -139,8 +193,8 @@ export function FrameModal({
         return;
       }
       if (typing) return;
-      if (e.key === 'ArrowLeft' && prev) { e.preventDefault(); router.replace(frameHref(prev.id)); }
-      else if (e.key === 'ArrowRight' && next) { e.preventDefault(); router.replace(frameHref(next.id)); }
+      if (e.key === 'ArrowLeft' && prev) { e.preventDefault(); goTo(prev); }
+      else if (e.key === 'ArrowRight' && next) { e.preventDefault(); goTo(next); }
     };
     document.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
@@ -149,7 +203,7 @@ export function FrameModal({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [close, router, frameHref, prev, next, pendingPin]);
+  }, [close, goTo, prev, next, pendingPin]);
 
   return (
     <>
@@ -170,15 +224,16 @@ export function FrameModal({
       aria-modal="true"
       aria-label={flow.name}
       onClick={close}
-      className="dark fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      aria-busy={loading}
+      className={`dark fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm ${animateIn ? 'modal-backdrop-in' : ''}`}
     >
       {/* Two-box layout: preview + comments side by side with gap */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex h-[90vh] w-full max-w-[1800px] flex-col gap-3 md:h-[80vh] md:flex-row"
+        className={`flex h-[90vh] w-full max-w-[1800px] flex-col gap-3 md:h-[80vh] md:flex-row ${animateIn ? 'modal-panel-in' : ''}`}
       >
         {/* Left box: header + preview */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl">
           {/* Header bar */}
           <div className="flex shrink-0 items-center gap-2 border-b border-white/5 px-3 py-3 md:gap-4 md:px-5">
             <div className="flex min-w-0 items-center gap-2.5 text-sm">
@@ -221,6 +276,14 @@ export function FrameModal({
             </button>
           </div>
 
+          {/* Still fetching the full-size screenshot: say so, instead of an
+              empty stage that looks broken. */}
+          {loading ? (
+            <div className="relative">
+              <div className="loading-bar" />
+            </div>
+          ) : null}
+
           {/* Image area */}
           <ZoomStage
             overlay={
@@ -230,9 +293,12 @@ export function FrameModal({
                   href={frameHref(prev.id)}
                   scroll={false}
                   replace
+                  /* Full prefetch: the neighbours' data is fetched while you
+                     look at this frame, so prev/next usually swap instantly. */
+                  prefetch
                   onClick={(e) => {
                     e.preventDefault();
-                    router.replace(frameHref(prev.id), { scroll: false });
+                    goTo(prev);
                   }}
                   aria-label={`Previous: ${prev.name}`}
                   className="absolute left-4 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[oklch(0.3_0.008_260)] text-white shadow-xl transition-transform hover:scale-105"
@@ -245,9 +311,10 @@ export function FrameModal({
                   href={frameHref(next.id)}
                   scroll={false}
                   replace
+                  prefetch
                   onClick={(e) => {
                     e.preventDefault();
-                    router.replace(frameHref(next.id), { scroll: false });
+                    goTo(next);
                   }}
                   aria-label={`Next: ${next.name}`}
                   className="absolute right-4 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[oklch(0.3_0.008_260)] text-white shadow-xl transition-transform hover:scale-105"
@@ -348,7 +415,14 @@ export function FrameModal({
                         readOnly={readOnly}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={src} alt={frameName} className="block h-auto w-full rounded-b-xl" />
+                        <img
+                        src={src}
+                        alt={frameName}
+                        className={`block h-auto w-full rounded-b-xl ${imageReady ? '' : 'skeleton skeleton-dark'}`}
+                        /* Hold a 16:10 box until the image arrives, so the
+                           window does not collapse to its title bar. */
+                        style={imageReady ? undefined : { aspectRatio: '16 / 10' }}
+                      />
                         {pendingPin && (
                           <PinPopover
                             pin={pendingPin}
@@ -366,10 +440,15 @@ export function FrameModal({
         </div>
 
         {/* Right box: Comments - separate rounded box */}
-        <div className="flex max-h-[45%] w-full shrink-0 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl md:max-h-none md:w-[340px]">
+        <div
+          className={`flex max-h-[45%] w-full shrink-0 flex-col overflow-hidden rounded-2xl bg-[oklch(0.16_0.007_260)] shadow-2xl transition-opacity duration-150 md:max-h-none md:w-[340px] ${
+            pendingFrame ? 'pointer-events-none opacity-40' : ''
+          }`}
+          aria-busy={pendingFrame !== null}
+        >
           <CommentsPanel
             frameRowId={frameRowId}
-            comments={comments}
+            comments={loadedComments}
             isAgency={isAgency}
             appSlug={appSlug}
             appId={appId}

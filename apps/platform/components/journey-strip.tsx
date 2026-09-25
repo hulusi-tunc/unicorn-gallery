@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type {
   ManifestFlow,
   ManifestFrame,
@@ -7,6 +6,7 @@ import type {
 import type { ReactNode } from 'react';
 import { ChevronRight, Play } from 'lucide-react';
 import { DeviceBezel } from '@/components/device-bezel';
+import { FrameCardLink } from '@/components/frame-card-link';
 import { UnresolvedBadge } from '@/components/unresolved-badge';
 import { WebCardThumb } from '@/components/web-card-thumb';
 import { imageHref } from '@/lib/image-href';
@@ -52,6 +52,8 @@ export function JourneyStrip({
               step={i + 1}
               platform={platform}
               href={`/app/${encodeURIComponent(appSlug)}/${encodeURIComponent(flow.id)}/${encodeURIComponent(frame.id)}${versionQuery}`}
+              flowName={flow.name}
+              total={flow.frames.length}
               isFresh={freshFrameKeys?.has(frame.id) ?? false}
               unresolved={unresolvedByFrame?.get(frame.id) ?? null}
             />
@@ -74,6 +76,8 @@ function JourneyCard({
   step,
   platform,
   href,
+  flowName,
+  total,
   isFresh,
   unresolved,
 }: {
@@ -81,14 +85,24 @@ function JourneyCard({
   step: number;
   platform: Platform;
   href: string;
+  flowName: string;
+  total: number;
   isFresh: boolean;
   unresolved: FrameUnresolvedSummary | null;
 }): ReactNode {
   const isMobile = platform !== 'web';
 
   return (
-    <Link
+    <FrameCardLink
       href={href}
+      preview={{
+        src: imageHref(frame.image),
+        name: frame.name,
+        flowName,
+        isMobile,
+        index: step,
+        total,
+      }}
       className="group flex flex-col gap-3 transition-transform hover:-translate-y-1"
     >
       <div className="relative">
@@ -148,6 +162,6 @@ function JourneyCard({
         </p>
         <p className="truncate font-mono text-[13px] text-neutral-500">{frame.id}</p>
       </div>
-    </Link>
+    </FrameCardLink>
   );
 }

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { AppHeader } from '@/components/header';
 import { FlowSidebar } from '@/components/flow-sidebar';
+import { FrameOpenOverlay } from '@/components/frame-open-overlay';
 import { VersionBanner } from '@/components/version-banner';
 import {
   getAppBySlug,
@@ -122,6 +123,7 @@ export default async function AppLayout({
         <div className="flex min-w-0 flex-1">{children}</div>
       </div>
       {modal}
+      <FrameOpenOverlay />
     </div>
   );
 }
