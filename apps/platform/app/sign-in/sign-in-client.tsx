@@ -2,7 +2,7 @@
 
 import { Loader2, Lock, Mail } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTheme } from '@/components/providers/theme-provider';
 import { BrandLogo } from '@/components/brand/brand-logo';
@@ -23,7 +23,6 @@ export function SignInClient({
   const { theme } = useTheme();
   const brand = useBrand();
   const t = getNd(theme);
-  const router = useRouter();
   const params = useSearchParams();
 
   const [email, setEmail] = useState(params.get('email') ?? '');
@@ -48,8 +47,10 @@ export function SignInClient({
         password,
       });
       if (err) throw err;
-      router.push(next ?? '/apps');
-      router.refresh();
+      // A full page load, not router.push: a white-labelled client signing in
+      // on the Unicorn host is redirected through /api/brand-handoff to
+      // another host, which a client-side navigation can't follow.
+      window.location.assign(next ?? '/apps');
     } catch (err) {
       setError((err as Error).message);
     } finally {

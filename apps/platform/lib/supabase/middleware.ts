@@ -13,6 +13,8 @@ const PUBLIC_PATHS = [
   '/forgot-password',
   '/reset-password',
   '/auth/callback',
+  // Redeems a one-time token from /api/brand-handoff; no session yet by design.
+  '/auth/handoff',
   '/auth/error',
   '/api/dev',
   '/api/sign-up',
@@ -25,6 +27,9 @@ const PUBLIC_PATHS = [
 ];
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
+  // Layouts can't see the URL; the (dashboard) layout needs it to send a
+  // white-labelled client on to the same page on their brand's host.
+  request.headers.set('x-pathname', request.nextUrl.pathname + request.nextUrl.search);
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
