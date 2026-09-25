@@ -27,7 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: brand.productName,
     description: brand.description,
-    icons: { icon: brand.icon, apple: brand.appleIcon },
+    icons: brand.icon ? { icon: brand.icon, apple: brand.appleIcon } : undefined,
   };
 }
 

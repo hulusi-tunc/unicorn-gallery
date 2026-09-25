@@ -28,9 +28,12 @@ export interface Brand {
   staffLabel: string;
   /** Public origin, no trailing slash. Share links for this brand's projects use it. */
   origin: string;
-  /** Favicon and home-screen icon, from /public. */
-  icon: string;
-  appleIcon: string;
+  /**
+   * Favicon and home-screen icon, from /public. None for a brand without a
+   * mark: the browser shows its neutral default.
+   */
+  icon?: string;
+  appleIcon?: string;
 }
 
 export const BRANDS: Record<BrandId, Brand> = {
@@ -54,8 +57,6 @@ export const BRANDS: Record<BrandId, Brand> = {
     authFooter: 'Netygo · Design review',
     staffLabel: 'Netygo',
     origin: (process.env.NEXT_PUBLIC_NETYGO_ORIGIN ?? 'https://netygo-review.vercel.app').replace(/\/$/, ''),
-    icon: '/brand/netygo-icon.png',
-    appleIcon: '/brand/netygo-apple-icon.png',
   },
 };
 
