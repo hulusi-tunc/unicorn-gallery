@@ -162,25 +162,20 @@ export interface FrameUnresolvedSummary {
  * can scan a flow at a glance AND hover for a quick look at what's open
  * without clicking through to the frame.
  */
-export async function getUnresolvedCommentsByFrame(
+export const getUnresolvedCommentsByFrame = cache(async (
   appId: string,
-): Promise<Map<string, FrameUnresolvedSummary>> {
+): Promise<Map<string, FrameUnresolvedSummary>> => {
   const supabase = await getSupabaseServerClient();
-  const { data: frames, error: framesErr } = await supabase
-    .from('frames')
-    .select('id, frame_id')
-    .eq('app_id', appId);
-  if (framesErr || !frames || frames.length === 0) return new Map();
-  const idToKey = new Map<string, string>();
-  for (const f of frames as Array<{ id: string; frame_id: string }>) {
-    idToKey.set(f.id, f.frame_id);
-  }
+  // Filter through the frame join rather than `.in('frame_id', [...every
+  // frame id])`: a big project put hundreds of UUIDs in the request URL and
+  // the query took 15s+. The inner join scopes to the app in one query and
+  // hands back the manifest frame key alongside each comment.
   const { data: comments, error: commentsErr } = await supabase
     .from('comments')
     .select(
-      'frame_id, body, created_at, author:profiles!comments_author_id_fkey(name, email, role, avatar_url)',
+      'body, created_at, frame:frames!inner(frame_id, app_id), author:profiles!comments_author_id_fkey(name, email, role, avatar_url)',
     )
-    .in('frame_id', Array.from(idToKey.keys()))
+    .eq('frame.app_id', appId)
     .is('resolved_at', null)
     .order('created_at', { ascending: false });
   if (commentsErr) return new Map();
@@ -191,15 +186,17 @@ export async function getUnresolvedCommentsByFrame(
     role: 'agency' | 'customer';
     avatar_url: string | null;
   };
+  type FrameRow = { frame_id: string; app_id: string };
   type RawComment = {
-    frame_id: string;
     body: string;
     created_at: string;
     // Supabase types nested selects as arrays even for single FK joins.
+    frame: FrameRow | FrameRow[] | null;
     author: AuthorRow | AuthorRow[] | null;
   };
   for (const c of (comments ?? []) as unknown as RawComment[]) {
-    const key = idToKey.get(c.frame_id);
+    const frame = Array.isArray(c.frame) ? c.frame[0] : c.frame;
+    const key = frame?.frame_id;
     if (!key) continue;
     let entry = result.get(key);
     if (!entry) {
@@ -220,7 +217,7 @@ export async function getUnresolvedCommentsByFrame(
     }
   }
   return result;
-}
+});
 
 /**
  * Frames in this app whose latest push (frames.latest_build_id → builds
@@ -796,9 +793,19 @@ export async function listFramesForApp(appId: string): Promise<Frame[]> {
  *
  * Returns null if the app has no frames at that version.
  */
-export const getManifestForApp = cache(async (
+export function getManifestForApp(
   appId: string,
-  buildId?: string,
+  buildId?: string | null,
+): Promise<ManifestSnapshot | null> {
+  // React's cache() keys on the exact argument list, so `(id)` from the
+  // layout and `(id, undefined)` from a page were two entries, and the whole
+  // manifest was built twice per request. Normalise before the cache.
+  return manifestForApp(appId, buildId ?? null);
+}
+
+const manifestForApp = cache(async (
+  appId: string,
+  buildId: string | null,
 ): Promise<ManifestSnapshot | null> => {
   if (buildId) {
     return getManifestForBuild(appId, buildId);
