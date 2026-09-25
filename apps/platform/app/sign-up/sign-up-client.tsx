@@ -105,7 +105,7 @@ export function SignUpClient(): ReactNode {
                 }}
               >
                 Designers and PMs sign up here with the agency invite code.
-                Customers receive an emailed invite from their PM.
+                Customers get their login from their PM.
               </p>
 
               <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -167,8 +167,8 @@ export function SignUpClient(): ReactNode {
                   }}
                 >
                   Are you a customer reviewing your app? You don&rsquo;t sign up
-                  here — your PM will email you an invite link. Click that link
-                  and you&rsquo;re in.
+                  here — your PM gives you an email and password to sign in
+                  with.
                 </p>
 
                 {error ? (

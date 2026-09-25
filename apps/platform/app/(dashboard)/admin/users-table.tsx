@@ -5,7 +5,6 @@ import {
   Copy,
   KeyRound,
   Loader2,
-  Mail,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -28,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { UserAvatar } from '@/components/user-avatar';
-import { addTeammate, createAccount, kickUser, setRole, updateAccount } from '@/lib/actions/admin';
+import { createAccount, kickUser, setRole, updateAccount } from '@/lib/actions/admin';
 import type { Profile, Role } from '@/lib/db';
 import { editorialFonts, getNd } from '@/lib/tokens';
 
@@ -49,7 +48,7 @@ export function UsersTable({
 }): ReactNode {
   const { theme } = useTheme();
   const t = getNd(theme);
-  const [panel, setPanel] = useState<'none' | 'create' | 'invite'>('none');
+  const [panel, setPanel] = useState<'none' | 'create'>('none');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
@@ -119,16 +118,6 @@ export function UsersTable({
           <button
             type="button"
             onClick={() => {
-              setPanel(panel === 'invite' ? 'none' : 'invite');
-              setEditingId(null);
-            }}
-            style={ghostButton(t)}
-          >
-            <Mail size={14} /> Invite by email
-          </button>
-          <button
-            type="button"
-            onClick={() => {
               setPanel(panel === 'create' ? 'none' : 'create');
               setEditingId(null);
             }}
@@ -140,7 +129,6 @@ export function UsersTable({
       </div>
 
       {panel === 'create' ? <CreateForm t={t} onClose={() => setPanel('none')} /> : null}
-      {panel === 'invite' ? <InviteForm t={t} onClose={() => setPanel('none')} /> : null}
 
       <div
         className="mb-6 flex items-center gap-2 rounded-xl border px-3.5 py-2.5"
@@ -811,105 +799,6 @@ function CredLine({ label, value, t }: { label: string; value: string; t: Tokens
     </div>
   );
 }
-
-function InviteForm({ onClose, t }: { onClose: () => void; t: Tokens }): ReactNode {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [flavor, setFlavor] = useState<Flavor>('designer');
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [signedUrl, setSignedUrl] = useState<string | null>(null);
-
-  function onSubmit(e: FormEvent): void {
-    e.preventDefault();
-    setError(null);
-    setSignedUrl(null);
-    startTransition(async () => {
-      const res = await addTeammate({
-        email,
-        name: name || undefined,
-        flavor,
-      });
-      if (res.error) setError(res.error);
-      else {
-        setSignedUrl(res.signInUrl ?? null);
-        router.refresh();
-      }
-    });
-  }
-
-  return (
-    <form onSubmit={onSubmit}>
-      <Panel t={t}>
-        <PanelHeader title="Invite a Unicorn by email" onClose={onClose} t={t} />
-        <p style={{ fontSize: 13, color: t.textSecondary }}>
-          Sends Supabase&rsquo;s invite email — they pick their own password. Use
-          &ldquo;New account&rdquo; instead if you want to set one yourself.
-        </p>
-
-        <Field label="EMAIL" t={t}>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.currentTarget.value)}
-            placeholder="teammate@studio.com"
-            style={inputStyle(t)}
-          />
-        </Field>
-
-        <Field label="NAME (optional)" t={t}>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.currentTarget.value)}
-            placeholder="Jane Designer"
-            style={inputStyle(t)}
-          />
-        </Field>
-
-        <Field label="LABEL" t={t}>
-          <Segmented
-            value={flavor}
-            onChange={setFlavor}
-            options={[
-              { value: 'designer', label: 'Designer' },
-              { value: 'non-designer', label: 'Non-designer (PM, ops)' },
-            ]}
-            t={t}
-          />
-        </Field>
-
-        {error ? <p style={{ fontSize: 12, color: t.danger }}>{error}</p> : null}
-        {signedUrl ? (
-          <p style={{ fontSize: 12, color: t.success }}>
-            Invited. Dev shortcut:{' '}
-            <a href={signedUrl} style={{ color: t.accent, textDecoration: 'underline' }}>
-              sign in as them
-            </a>
-            .
-          </p>
-        ) : null}
-
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} style={ghostButton(t)}>
-            Close
-          </button>
-          <button
-            type="submit"
-            disabled={pending || !email}
-            style={{ ...primaryButton(t), opacity: pending || !email ? 0.5 : 1 }}
-          >
-            {pending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
-            Send invite
-          </button>
-        </div>
-      </Panel>
-    </form>
-  );
-}
-
 function Panel({ t, children }: { t: Tokens; children: ReactNode }): ReactNode {
   return (
     <div
